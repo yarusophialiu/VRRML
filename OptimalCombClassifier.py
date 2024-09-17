@@ -96,12 +96,21 @@ def evaluate_test_data(model, test_loader):
                         res_values, fps_values, unique_indices
 
 
-def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=False, VELOCITY=True):
+def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=True):
     
     history = []
     train_accuracies = []
     val_accuracies = []
     optimizer = opt_func(model.parameters(),lr)
+
+    model_path = ""
+    if SAVE_MODEL or SAVE_HALFWAY:
+        now = datetime.now()
+        dir_pth = now.strftime("%Y-%m-%d")
+        os.makedirs(dir_pth, exist_ok=True)
+        hrmin = now.strftime("%H_%M")
+        model_path = os.path.join(dir_pth, hrmin)
+        # os.makedirs(model_path, exist_ok=True)
 
     # an epoch is one pass through the entire dataset
     for epoch in range(epochs):
@@ -149,9 +158,14 @@ def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=F
         model.epoch_end(epoch, result) # print loss results
         history.append(result)
 
-        if SAVE and epoch % 10 == 0:
+        if SAVE_HALFWAY and epoch % 10 == 0 and epoch > 0:
+            os.makedirs(model_path, exist_ok=True)
             print(f"Epoch {epoch} is a multiple of 20.")
-            # save_checkpoint(model, optimizer,  f'{save_path}/checkpoint{epoch}.pth', epoch)
+            save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
+        
+    if SAVE_MODEL:
+        os.makedirs(model_path, exist_ok=True)
+        torch.save(model.state_dict(), f'{model_path}/classification.pth')
     
     return history
 
@@ -163,9 +177,9 @@ if __name__ == "__main__":
     data_train_directory = f'{VRRML}/train' 
     data_val_directory = f'{VRRML}/validation' 
     # data_test_directory = f'{data_directory}/bistro-fast/test_dec_ref_bistro/test'
-    data_test_directory = f'{VRRML}/test'
-    SAVE_MODEL = False
-    SAVE_MODEL_HALF_WAY = False
+    # data_test_directory = f'{VRRML}/test'
+    SAVE_MODEL = True
+    SAVE_MODEL_HALF_WAY = True
     START_TRAINING= True # True False
     TEST_EVAL = False
     PLOT_TEST_RESULT = False
@@ -205,37 +219,14 @@ if __name__ == "__main__":
             train_dl = DeviceDataLoader(train_loader, device)
             val_dl = DeviceDataLoader(val_loader, device)
             to_device(model, device)
-
-        model_path = ""
-        if SAVE_MODEL:
-            now = datetime.now()
-            dir_pth = now.strftime("%Y-%m-%d")
-            os.makedirs(dir_pth, exist_ok=True)
-            hrmin = now.strftime("%H_%M")
-            model_path = os.path.join(dir_pth, hrmin)
-            os.makedirs(model_path, exist_ok=True)
             
         # fitting the model on training data and record the result after each epoch
-        history = fit(num_epochs, lr, model, train_dl, val_dl, model_path, opt_func, SAVE=SAVE_MODEL_HALF_WAY)
-        
-        if SAVE_MODEL:
-            torch.save(model.state_dict(), f'{model_path}/classification.pth')
-
-
-
-
-
-
-
-
-
-
-
-
+        history = fit(num_epochs, lr, model, train_dl, val_dl, opt_func, \
+                      SAVE_MODEL=SAVE_MODEL, SAVE_HALFWAY=SAVE_MODEL_HALF_WAY)
 
 
     if TEST_EVAL:
-        model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
+        model = DecRefClassification(num_framerates, num_resolutions)
         model_path = f'2024-05-06/17_02/classification_reference.pth'
         model.load_state_dict(torch.load(model_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
