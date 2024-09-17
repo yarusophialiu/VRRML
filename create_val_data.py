@@ -1,7 +1,7 @@
 import os
 import shutil
 import random
-# from utils import *
+from utils import *
 
 
 
@@ -20,8 +20,10 @@ def move_random_images(src_folder, dest_folder, percentage=0.1):
         dest_path = os.path.join(dest_folder, image)
         if MOVE:
             shutil.move(src_path, dest_path)
+        if COPY:
+            shutil.copy(src_path, dest_path)
     # print(f"Moved {num_images_to_move} images from {src_folder} to {dest_folder}.\n")
-    print(f"Moved {num_images_to_move} images from to {dest_folder}.\n")
+    print(f"Copied {num_images_to_move} images from to {dest_folder}.\n")
 
 
 
@@ -32,10 +34,10 @@ def create_validation_data(patch_dir, percentage=0.10):
         print(f'{os.listdir(path_folder_full)}')
         # Iterate over the bitrate subfolders (e.g., 720x30x500)
         for bitrate_folder in os.listdir(path_folder_full):
-            if bitrate_folder != '1000kbps':
-                print(f'bitrate_folder {bitrate_folder} not valid')
-                continue
-            print(f'bitrate_folder {bitrate_folder} valid')
+            # if bitrate_folder != '1000kbps':
+            #     print(f'bitrate_folder {bitrate_folder} not valid')
+            #     continue
+            print(f'bitrate_folder {bitrate_folder}')
 
             # fps_target, resolution_target, bitrate = map(int, bitrate_folder.split('x'))
             bitrate_path = os.path.join(path_folder_full, bitrate_folder)
@@ -44,15 +46,25 @@ def create_validation_data(patch_dir, percentage=0.10):
             dest_folder = f'{validation_data_dir}/{path_folder}/{bitrate_folder}'
             # print(f'bitrate_folder {bitrate_folder}')
             # print(f'dest_folder {dest_folder}')
-            # move_random_images(bitrate_path, dest_folder, percentage=percentage)
+            move_random_images(bitrate_path, dest_folder, percentage=percentage)
 
 
 if __name__ == "__main__":
     # patch_dir = f'{VRRML}/train' # scenes
     # validation_data_dir = f'{VRRML}/validation'
-    MOVE = True # True False
-    scene = 'suntemple_statue'
-    base_dir = r'C:\Users\15142\Projects\VRR\Data\VRR_Patches'
+    MOVE = False # True False
+    COPY = True
+    # scene = 'suntemple_statue'
+    # scenes = ['bistro', ]
+            #   'bistro', 
+            #     'crytek_sponza',] 
+                # 'gallery', 
+                # 'living_room', 'room', 
+                # 'lost_empire', 'suntemple',]
+    # for scene in scenes:
+        # print(f'====================== scene {scene} =========================')
+    # base_dir = r'C:\Users\15142\Projects\VRR\Data\VRR_Patches'
+    base_dir = f'{VRRML}/ML'
     # patch_dir =  f'{base_dir}/2024-09-12/{scene}'
 
     # base_dir = '/home/yl962/rds/hpc-work/VRR/Data/VRR_Patches'
@@ -60,11 +72,9 @@ if __name__ == "__main__":
 
 
     # cleaned_patches_dir = f'{base_dir}/HPC/cleaned_patches'
-    # validation_data_dir = f'{cleaned_patches_dir}/{scene}'
-    cleaned_patches_dir = f'{base_dir}/HPC/cleaned_patches'
-    validation_data_dir = f'{base_dir}/2024-09-12/{scene}'
-    patch_dir =  f'{cleaned_patches_dir}/{scene}'
+    validation_data_dir = f'{VRRML}/ML_smaller/validation'
+    patch_dir =  f'{base_dir}/validation'
 
     os.makedirs(validation_data_dir, exist_ok=True)
 
-    create_validation_data(patch_dir, percentage=0.50)
+    create_validation_data(patch_dir, percentage=0.40)
