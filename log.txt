@@ -1,0 +1,19 @@
+
+
+
+
+bistro
+bistro_path1_seg1_1 2000kbps, files_num 1397
+bistro_path1_seg3_2 2000kbps, files_num 517
+
+bistro generate path2 to 5
+id 10-45
+
+
+zip bistro, delete
+
+crytek sponza number 
+zip
+
+
+
