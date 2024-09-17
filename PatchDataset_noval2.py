@@ -28,7 +28,7 @@ class PatchDataset(Dataset):
     # e.g. DataLoader(dataset, batch_size=2, shuffle=True)
     def __getitem__(self, idx):
         path_bitrate_folder = self.path_bitrate_folders[idx]
-        print(f'path_bitrate_folder {path_bitrate_folder}')
+        print(f'\npath_bitrate_folder {path_bitrate_folder}')
         images = []
         metadata = []
 
@@ -38,14 +38,10 @@ class PatchDataset(Dataset):
         # _, _, _, _, resolution_target, fps_target, bitrate = map(int, path_bitrate_folder.split('_'))
         name_arr = path_bitrate_folder.split('_')
         resolution_target, fps_target, bitrate = int(name_arr[-3]), int(name_arr[-2]), int(name_arr[-1])
-        # print(f'fps_target, resolution_target, bitrate {fps_target, resolution_target, bitrate}')
-        # bitrate_path = os.path.join(path_bitrate_folder, path_bitrate_folder)
-        
-        count = 0
+
         for image_name in os.listdir(path_bitrate_folder):
             # print(f'\nimage_name {image_name}')
             image_path = os.path.join(path_bitrate_folder, image_name)
-            
             # Parse the image name, e.g., '00c9a505_90_480_500_241.png'
             image_id, fps, resolution, image_bitrate, velocity = image_name.split('_')
             fps, resolution, image_bitrate, velocity = int(fps), int(resolution), int(image_bitrate), int(velocity.split('.')[0])
@@ -55,23 +51,15 @@ class PatchDataset(Dataset):
                 image = self.transform(image)
 
             images.append(image)
-            
-            # fps_data = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120,]
-            # resolution_data = [360, 480, 720, 864, 1080]
-            # bitrates_data = [500, 1000, 1500, 2000]
             # print(f'fps_target, resolution_target, image_bitrate {fps_target, resolution_target, image_bitrate}')
             # print(f'fps, resolution {fps, resolution}')
             metadata.append([fps, resolution, fps_target, resolution_target, image_bitrate, velocity/1000])
-            
-            # count += 1
-            # if count > 2:
-            #     break
 
         # Stack the images into a single tensor (batch_size, C, H, W)
         images_tensor = torch.stack(images)
         metadata = torch.tensor(metadata) # (9000, 4)
-        print(f'images_tensor {images_tensor.size()}')
-        print(f'metadata {metadata.size()}')
+        # print(f'images_tensor {images_tensor.size()}')
+        # print(f'metadata {metadata.size()}')
 
         fps_column = metadata[:, 0]
         resolution_column = metadata[:, 1]
@@ -107,29 +95,8 @@ class PatchDataset(Dataset):
         metadata[:, 2] = fps_indices
         metadata[:, 3] = res_indices
 
-        
-        # if False:
-            # fps_data = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120,]
-            # resolution_data = [360, 480, 720, 864, 1080]
-            # bitrate_data = [500, 1000, 1500, 2000]
-
-            # print(f'metadata \n {metadata}\n\n\n')
-
-            # image_tensor size (1, 10000, 64, 64), metadata list of 10000 elements
+        # image_tensor size (1, 10000, 64, 64), metadata list of 10000 elements
         return images_tensor, metadata # fps_target, resolution_target, image_bitrate
-        # return None, None
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -147,13 +114,13 @@ if __name__ == "__main__":
     mean_velocity = 341011.652
     std_velocity = 3676701.584
 
-    # device = get_default_device()
-    # cuda  = device.type == 'cuda'
+    device = get_default_device()
+    cuda  = device.type == 'cuda'
     # print(f'cuda {cuda}')
 
-    # if device.type == 'cuda':
-    #     print(f'Loading data to cuda...')
-    #     train_dl = DeviceDataLoader(dataloader, device)
+    if device.type == 'cuda':
+        print(f'Loading data to cuda...')
+        train_dl = DeviceDataLoader(dataloader, device)
 
     # model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
     # Training loop
@@ -162,10 +129,10 @@ if __name__ == "__main__":
         # for mini_batch_idx, (images, metadata, fps_target, res_target, bitrate) in enumerate(train_dl): # dataloader
         for mini_batch_idx, (images, metadata) in enumerate(dataloader): # dataloader, train_dl
             print(f'============== batch {mini_batch_idx} ==============')
-            # print(f"mini_batch_idx: {mini_batch_idx}")
-            # print(f"images size: {images.size()}\n")  # (batch_size, 10000, 3, 64, 64) if 10000 images per folder
-            # print(f"metadata: {metadata.size()}") #  \n {metadata}
-            # # print(f"fps_target: {fps_target}, res_target: {res_target}, bitrate {bitrate}")
+            print(f"mini_batch_idx: {mini_batch_idx}")
+            print(f"images size: {images.size()}")  # (batch_size, 10000, 3, 64, 64) if 10000 images per folder
+            print(f"metadata: {metadata.size()}") #  \n {metadata}
+            # print(f"fps_target: {fps_target}, res_target: {res_target}, bitrate {bitrate}")
 
             # # (batch_size, 10000, 3, 64, 64) if 10000 images per folder, dataloader only shuffles on batch_size
             # # TODO: shuffle images before fit
