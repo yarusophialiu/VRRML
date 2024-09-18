@@ -395,3 +395,26 @@ def normalize_max_min(sample, min_vals, max_vals):
     sample = (sample - min_vals) / (max_vals - min_vals)
     # return round(sample, 3)
     return sample
+
+
+
+def show_patches(images, num_patches=25):
+    # Calculate grid size (assume square grid)
+    grid_size = int(np.sqrt(num_patches))
+    
+    # Create a figure to display the patches
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(10, 10))
+    
+    for i in range(grid_size):
+        for j in range(grid_size):
+            idx = i * grid_size + j
+            if idx < num_patches:
+                # Transpose image from (3, 64, 64) to (64, 64, 3) for displaying
+                img = np.transpose(images[idx], (1, 2, 0))
+                # print(f'img {img.shape}')
+                # Show the image in the corresponding subplot
+                axes[i, j].imshow(img)
+                axes[i, j].axis('off')  # Hide the axes for a cleaner look
+
+    plt.tight_layout()
+    plt.show()
