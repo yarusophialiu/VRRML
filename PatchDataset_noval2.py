@@ -7,6 +7,12 @@ from utils import *
 from DeviceDataLoader import DeviceDataLoader
 
 
+fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
+res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
+max_velocity = 51918288
+min_velocity = 0.022
+mean_velocity = 341011.652
+std_velocity = 3676701.584
 
 class PatchDataset(Dataset):
     def __init__(self, root_dir, transform=None):
@@ -23,12 +29,12 @@ class PatchDataset(Dataset):
         return len(self.path_bitrate_folders)
 
 
-# if batch size = 1, return 1 __getitem__ 
+    # if batch size = 1, return 1 __getitem__ 
     # if batch size = 2, return 2 __getitem__
     # e.g. DataLoader(dataset, batch_size=2, shuffle=True)
     def __getitem__(self, idx):
         path_bitrate_folder = self.path_bitrate_folders[idx]
-        print(f'\npath_bitrate_folder {path_bitrate_folder}')
+        # print(f'\npath_bitrate_folder {path_bitrate_folder}')
         images = []
         metadata = []
 
@@ -46,7 +52,7 @@ class PatchDataset(Dataset):
             image_id, fps, resolution, image_bitrate, velocity = image_name.split('_')
             fps, resolution, image_bitrate, velocity = int(fps), int(resolution), int(image_bitrate), int(velocity.split('.')[0])
 
-            image = Image.open(image_path).convert('RGB')
+            image = Image.open(image_path).convert('RGB') # range should be 0-255, is a PIL class
             if self.transform:
                 image = self.transform(image)
 
@@ -54,12 +60,14 @@ class PatchDataset(Dataset):
             # print(f'fps_target, resolution_target, image_bitrate {fps_target, resolution_target, image_bitrate}')
             # print(f'fps, resolution {fps, resolution}')
             metadata.append([fps, resolution, fps_target, resolution_target, image_bitrate, velocity/1000])
-
+        
         # Stack the images into a single tensor (batch_size, C, H, W)
         images_tensor = torch.stack(images)
         metadata = torch.tensor(metadata) # (9000, 4)
         # print(f'images_tensor {images_tensor.size()}')
         # print(f'metadata {metadata.size()}')
+        # print(f'images_tensor \n {images_tensor}')
+
 
         fps_column = metadata[:, 0]
         resolution_column = metadata[:, 1]
@@ -100,19 +108,12 @@ class PatchDataset(Dataset):
 
 
 
-# structure is like bistro_path2_seg3_1/1080x60x1500
+# structure is like bistro_path1_seg2_2_480_110_500
 if __name__ == "__main__":
     # Initialize dataset
     root_dir = f'{VRRML}/ML_smaller/train_bitratelabel/'  # Path to the train folder
     dataset = PatchDataset(root_dir=root_dir, transform=transform)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)  # One path folder per batch
-
-    fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
-    res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
-    max_velocity = 51918288
-    min_velocity = 0.022
-    mean_velocity = 341011.652
-    std_velocity = 3676701.584
 
     device = get_default_device()
     cuda  = device.type == 'cuda'

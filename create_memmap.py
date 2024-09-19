@@ -17,10 +17,15 @@ def create_memmap(root_dir, memmap_file, memmap_shape):
                 image_path = os.path.join(full_path, image_name)
                 image = Image.open(image_path).convert('RGB')
                 image_data = np.array(image)
+                # image_data = image_data / 255.0
+                # print(f'image_data \n {image_data}')
                 
-                # Store image in memmap
+                # # Store image in memmap
                 memmap[image_idx] = image_data
                 image_idx += 1
+
+                # if image_idx > 1:
+                #     break
 
     memmap.flush()  # Ensure data is written to disk
 
@@ -32,7 +37,7 @@ def create_metadata_memmap(root_dir, memmap_file, metadata_shape):
 
     patch_idx = 0
     for path_bitrate_folder in os.listdir(root_dir):
-        print(f'\npath_bitrate_folder {path_bitrate_folder}')
+        # print(f'\npath_bitrate_folder {path_bitrate_folder}')
         resolution_target, fps_target, bitrate = path_bitrate_folder.split('_')[-3:]
         resolution_target, fps_target  = int(resolution_target), int(fps_target)
         # print(f'resolution_target, fps_target, bitrate {resolution_target, fps_target, bitrate}')
@@ -73,12 +78,14 @@ if __name__ == "__main__":
     mean_velocity = 341011.652
     std_velocity = 3676701.584
 
-    base_dir = r'C:\Users\15142\Projects\VRR\Data\VRRML\ML_smaller'
-    root_dir = f'{base_dir}/train_bitratelabel'
-    memmap_file = f'{base_dir}/train_bitratelabel.dat'
-    metadata_memmap_file = f'{base_dir}/train_bitratelabel_metadata_normalize.dat'
-    total_number_of_patches = 1200
+    type = 'validation'
+    base_dir = r'C:\Users\15142\Projects\VRR\Data\VRRML\ML' # TODO
+    root_dir = f'{base_dir}/{type}_bitratelabel'
+    memmap_file = f'{base_dir}/{type}_bitratelabel.dat'
+    metadata_memmap_file = f'{base_dir}/{type}_bitratelabel_metadata_normalize.dat'
+
+    total_number_of_patches = 28800 # 1200 288000 28800 TODO
     memmap_shape = (total_number_of_patches, 64, 64, 3)  # Assuming images are 64x64 RGB
     metadata_shape = (total_number_of_patches, 6) # 6 metadata fields
-    # create_memmap(root_dir, memmap_file, memmap_shape)
-    create_metadata_memmap(root_dir, metadata_memmap_file, metadata_shape)
+    create_memmap(root_dir, memmap_file, memmap_shape)
+    # create_metadata_memmap(root_dir, metadata_memmap_file, metadata_shape)

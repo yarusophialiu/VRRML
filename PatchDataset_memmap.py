@@ -9,15 +9,23 @@ from DeviceDataLoader import DeviceDataLoader
 from torch.utils.data import Dataset
 
 
+fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
+res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
+max_velocity = 51918288
+min_velocity = 0.022
+mean_velocity = 341011.652
+std_velocity = 3676701.584
 
-class PatchDataset(Dataset):
-    def __init__(self, root_dir, image_memmap_file, metadata_memmap_file, num_patches, num_patches_per_subfolder, transform=None):
+
+class PatchDataset_mempmap(Dataset):
+    def __init__(self, root_dir, image_memmap_file, metadata_memmap_file, num_patches, num_patches_per_subfolder, image_shape, transform=None):
         self.root_dir = root_dir
         self.transform = transform
         self.num_patches = num_patches
         self.num_patches_per_subfolder = num_patches_per_subfolder
+        self.image_shape = image_shape
 
-        self.image_memmap = np.memmap(image_memmap_file, dtype='uint8', mode='r', shape=(num_patches, *image_shape))
+        self.image_memmap = np.memmap(image_memmap_file, dtype='uint8', mode='r', shape=(num_patches, *self.image_shape)) # uint8
         self.metadata_memmap = np.memmap(metadata_memmap_file, dtype='float32', mode='r', shape=(num_patches, 6))  # 6 metadata fields
 
         # # Get all subfolder names (e.g., bistro_path1_seg2_2_480_110_500)
@@ -38,25 +46,32 @@ class PatchDataset(Dataset):
         start_idx = idx * self.num_patches_per_subfolder
         end_idx = start_idx + self.num_patches_per_subfolder
         # print(f'subfolder {subfolder} ')
-        # print(f'start_idx - end_idx {start_idx}-{end_idx} ')
-
+        
         for i in range(start_idx, end_idx):
             image_data = self.image_memmap[i]
+            # print(f'image_data {image_data.shape} \ {image_data}')
+
             image = Image.fromarray(image_data)
-            # if self.transform:
-            #     print(f'transformation')
-            #     image = self.transform(image)
+            # print(f'image {image}')
+            if self.transform: # torchvision.transforms.ToTensor(), which automatically converts image data from the [0, 255] range (integers) to the [0, 1] range (floating-point values).
+                image = self.transform(image)
+                # print(f'image {image.size()}')
+
             images.append(image)
             metadata.append(self.metadata_memmap[i])
 
-        combined_np_array = np.array(images)
-        images_tensor = torch.from_numpy(combined_np_array) # torch.Size([200, 64, 64, 3])
-        images_tensor = images_tensor.permute(0, 3, 1, 2)
+        # combined_np_array = np.array(images)
+        # print(f'combined_np_array \n {combined_np_array}')
+
+        # images_tensor = torch.from_numpy(images) # torch.Size([200, 64, 64, 3])
+        # images_tensor = images_tensor.permute(0, 3, 1, 2)
+        images_tensor = torch.stack(images)
+        # print(f'images_tensor \n {images_tensor}')
 
         combined_metadata_array = np.array(metadata)
         metadata_tensor = torch.from_numpy(combined_metadata_array) # torch.Size([200, 6])
 
-        return images_tensor, metadata_tensor, idx
+        return images_tensor, metadata_tensor
 
 
 # structure is like bistro_path2_seg3_1/1080x60x1500
@@ -77,15 +92,8 @@ if __name__ == "__main__":
     
     # call init() only, getitem not called
     # The DataLoader will use the dataset’s __getitem__() method to retrieve individual samples for each batch as you iterate over it.
-    dataset = PatchDataset(root_dir, image_memmap_file, metadata_memmap_file, total_number_of_patches, num_patches_per_subfolder, image_shape)
+    dataset = PatchDataset_mempmap(root_dir, image_memmap_file, metadata_memmap_file, total_number_of_patches, num_patches_per_subfolder, image_shape, transform=transform)
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=4, pin_memory=True)
-
-    fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
-    res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
-    max_velocity = 51918288
-    min_velocity = 0.022
-    mean_velocity = 341011.652
-    std_velocity = 3676701.584
 
     device = get_default_device()
     cuda  = device.type == 'cuda'
@@ -99,13 +107,18 @@ if __name__ == "__main__":
     for epoch in range(1):
         print(f"================= Epoch {epoch + 1} =================")
         # for mini_batch_idx, (images, metadata, fps_target, res_target, bitrate) in enumerate(train_dl): # dataloader
-        for mini_batch_idx, (images, metadata, idx) in enumerate(dataloader): # dataloader, train_dl
+        for mini_batch_idx, (images, metadata) in enumerate(dataloader): # dataloader, train_dl
             print(f'============== batch {mini_batch_idx} ==============')
             # print(f"mini_batch_idx: {mini_batch_idx}")
             # images size：torch.Size([2, 200, 64, 64, 3]) (batch_size, num_patches, channels, height, width
             # print(f"images size: {images.size()}")  # (batch_size, 10000, 3, 64, 64) if 10000 images per folder
             # print(f"metadata: {metadata.size()} ") #  \n {metadata}
             # print(f"idx: {idx} ")
+            print(f'images {images.size()}')
+
+            # img_n = images * 255
+            # img_n = img_n.int()
+            # print(f'img_n {img_n.size()}')
             show_patches(images[0], num_patches=25)
 
             # Your training logic here...

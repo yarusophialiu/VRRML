@@ -410,10 +410,12 @@ def show_patches(images, num_patches=25):
             idx = i * grid_size + j
             if idx < num_patches:
                 # Transpose image from (3, 64, 64) to (64, 64, 3) for displaying
-                img = np.transpose(images[idx], (1, 2, 0))
+                print(f'images[idx] {images[idx].size()}')
+
+                # img = np.transpose(images[idx], (1, 2, 0))
                 # print(f'img {img.shape}')
                 # Show the image in the corresponding subplot
-                axes[i, j].imshow(img)
+                axes[i, j].imshow(images[idx].permute(1, 2, 0)) # after permute height, width, channel
                 axes[i, j].axis('off')  # Hide the axes for a cleaner look
 
     plt.tight_layout()
