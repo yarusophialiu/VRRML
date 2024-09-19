@@ -108,7 +108,7 @@ def evaluate_test_data(model, test_loader):
 
 
 def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=False, VELOCITY=False):
-    
+    print(f'fit VELOCITY {VELOCITY}')
     history = []
     train_accuracies = []
     val_accuracies = []
@@ -129,11 +129,10 @@ def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=F
         # do all batches cover the whole dataset?
         for batch in train_loader: # batch is a dictionary with 32 images information, e.g. 'fps': [70, 80, ..., 150]
             # print(f'batch {batch[fps]}')
-            # print(f'=============== batch {count} ===============') # train_size / batch_size
+            print(f'=============== batch {count} ===============') # train_size / batch_size
             count += 1
-            # fps= batch['fps']
+            images= batch['image']
             # print(f"Input batch shape: {images.size()}")
-            # print(f"fps batch shape: {fps.size()}")
             # get accuracy
             loss = model.training_step(batch, VELOCITY=VELOCITY) # model
             train_losses.append(loss)
@@ -162,41 +161,41 @@ def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=F
 # fps useful, resolution not useful
 # OLD from the last VRRML on desktop
 if __name__ == "__main__":
-    data_directory = 'C:/Users/15142/Desktop/data/VRR-video-classification/'
-    # data_directory = 'C:/Users/15142/Desktop/data/VRR-classification/'
-    data_train_directory = f'{data_directory}/bistro-fast/train-dec-ref-v-bistro-fast/train' 
-    # data_test_directory = f'{data_directory}/bistro-fast/test_dec_ref_bistro/test'
-    data_test_directory = f'{data_directory}/bistro-fast/test-dec-ref-v-bistro-fast/test'
+    folder = 'ML_smaller'
+    data_train_directory = f'{VRRML}/{folder}/train_label' # ML_smaller
+    data_val_directory = f'{VRRML}/{folder}/validation_label' 
+
     SAVE_MODEL = False
     SAVE_MODEL_HALF_WAY = False
-    START_TRAINING= False # True False
+    START_TRAINING= True # True False
     TEST_EVAL = False
     PLOT_TEST_RESULT = False
     SAVE_PLOT = True
     TEST_SINGLE_IMG = False
 
-    num_epochs = 60
+    num_epochs = 6
     lr = 0.001
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 128
-    val_size = 4096
+    batch_size = 3
 
     num_framerates, num_resolutions = 10, 5
     TYPE = "reference"
     VELOCITY = True
 
     # step1 load data
-    dataset = VideoSinglePatchDataset(directory=data_train_directory, TYPE=TYPE, VELOCITY=VELOCITY) # len 27592
-    test_dataset = VideoSinglePatchDataset(directory=data_test_directory, TYPE=TYPE, VELOCITY=VELOCITY) 
-    train_size = len(dataset) - val_size 
-    print(f'total data {len(dataset)}, batch_size {batch_size}')
-    print(f'train_size {train_size}, val_size {val_size}, test_size {len(test_dataset)}\n')
+    dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, VELOCITY=VELOCITY) # len 27592
+    val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, VELOCITY=VELOCITY) # len 27592
+    # test_dataset = VideoSinglePatchDataset(directory=data_test_directory, TYPE=TYPE, VELOCITY=VELOCITY) 
+    train_size = len(dataset)
+    val_size = len(val_dataset)
+    # print(f'total data {len(dataset)}, batch_size {batch_size}')
+    print(f'train_size {train_size}, val_size {val_size}, batch_size {batch_size}\n')
     # print(f"Train dataset  labels are: \n{dataset.labels}")
     print(f"Train dataset fps labels are: \n{dataset.fps_targets}")
     print(f"Train dataset res labels are: \n{dataset.res_targets}\n")
-    print(f"Test dataset fps labels are: \n{test_dataset.fps_targets}")
-    print(f"Test dataset res labels are: \n{test_dataset.res_targets}\n")
+    print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}")
+    print(f"Validation dataset res labels are: \n{val_dataset.res_targets}\n")
     sample = dataset[0]
     print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
     print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
@@ -206,16 +205,16 @@ if __name__ == "__main__":
 
     if START_TRAINING:
         # step2 split data and prepare batches
-        train_data, val_data = random_split(dataset,[train_size,val_size])
-        print(f"Length of Train Data : {len(train_data)}")
-        print(f"Length of Validation Data : {len(val_data)} \n")
+        # train_data, val_data = random_split(dataset,[train_size,val_size])
+        # print(f"Length of Train Data : {len(train_data)}")
+        # print(f"Length of Validation Data : {len(val_data)} \n")
 
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
         # print(model)
 
         # dataloader gives batch
-        train_dl = DataLoader(train_data, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
-        val_dl = DataLoader(val_data, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
+        train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
+        val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
         
         if device.type == 'cuda':
             print(f'Loading data to cuda...')

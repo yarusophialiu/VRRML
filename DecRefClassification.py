@@ -18,7 +18,8 @@ import torch.nn.functional as F
 # from VideoSinglePatchDataset import VideoSinglePatchDataset
 # from DeviceDataLoader import DeviceDataLoader
 from utils import *
-from ImageClassificationBase import *
+# from ImageClassificationBase import *
+from ImageClassificationBase_old import * # TODO
 
 
 
@@ -68,32 +69,25 @@ class DecRefClassification(ImageClassificationBase):
         self.fc_fps = nn.Linear(16, num_framerates)
 
     
-    def forward(self, images, fps, bitrate, resolution, velocity=0):
+    def forward(self, images, fps, bitrate, resolution, velocity): # velocity=0
         """images, fps, image_bitrate, resolution, velocity"""
         # print(f'image {images.size()} ')
         features = self.network(images)    
         # print(f'========= forward =========')
         # print(f'features \n {features[0]}')
-        # print(f'resolution {resolution.size()} \n {resolution}')
-        # print(f'fps {fps}')
-        # if self.velocity:
-        #     fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float()  # Example way to combine fps and bitrate
-        # else:
-        #     fps_resolution_bitrate = torch.stack([fps, bitrate, resolution], dim=1).float()
+        # print(f'fps {fps.size()} {fps}')
 
-        
-        fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float()  # Example way to combine fps and bitrate
+        fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float()  # TODO dim=1 Example way to combine fps and bitrate
+        # fps_resolution_bitrate = torch.stack([fps, bitrate, resolution], dim=1).float()  # Example way to combine fps and bitrate
         # print(f'fps_resolution_bitrate {fps_resolution_bitrate}')
 
         combined = torch.cat((features, fps_resolution_bitrate), dim=1)
         # print(f'combined {combined.size()}\n {combined}')               
 
         x = self.fc_network(combined)
-
         res_out = self.fc_res(x) 
         fps_out = self.fc_fps(x) 
         # print(f'res_out {res_out.squeeze(1)} \n\n\n')
-
         return res_out, fps_out
 
     

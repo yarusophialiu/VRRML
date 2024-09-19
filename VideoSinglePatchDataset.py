@@ -5,41 +5,18 @@ from torch.utils.data import random_split
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset
 from torchvision import transforms
-
 from PIL import Image
-
+from utils import *
 
 
 fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
 res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
-
-
-class CustomTransform:
-    def __init__(self, output_size, TYPE):
-        # print(f'num_patches {num_patches}')
-        self.output_size = output_size
-        self.num_patches = 2
-        self.TYPE = TYPE
-        self.to_tensor = transforms.ToTensor()
-
-    def __call__(self, image):
-        w, h = image.size
-        left_half = image.crop((0, 0, h, h))
-        right_half = image.crop((64, 0, w, h))
-
-        # left_half.show()
-        # right_half.show()
-        # print(f'self.TYPE {self.TYPE}')
-        # print(f'patches {patches.size()} \n {patches}')
-        if self.TYPE == 'decoded': 
-            return left_half 
-        if self.TYPE == 'reference':
-            return right_half
-        
+mean_velocity = 341011.652
+std_velocity = 3676701.584
 
 # dataset: handling batching, shuffling, and iterations over the dataset during training or inference
 class VideoSinglePatchDataset(Dataset):
-    def __init__(self, directory, TYPE, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, SINGLE_INPUT=False):
+    def __init__(self, directory, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, SINGLE_INPUT=False):
         self.root_directory = directory
         self.patch_size = patch_size
         self.velocity = VELOCITY
@@ -59,19 +36,11 @@ class VideoSinglePatchDataset(Dataset):
 
         # print(f'TYPE {TYPE}')
         # print(f'self.min_bitrate, self.max_bitrate {self.min_bitrate, self.max_bitrate}')
-        if SINGLE_INPUT:
-            self.transform = transforms.Compose([
-                        # CustomTransform(patch_size, TYPE) ,
-                        transforms.Resize((64, 64)),  # Resize images to 64x64
-                        transforms.ToTensor(),  # Convert images to PyTorch tensors
-                    ]) 
-        else:
-            self.transform = transforms.Compose([
-                    CustomTransform(patch_size, TYPE) ,
+        self.transform = transforms.Compose([
+                    # CustomTransform(patch_size, TYPE) ,
                     transforms.Resize((64, 64)),  # Resize images to 64x64
                     transforms.ToTensor(),  # Convert images to PyTorch tensors
-                ]) 
-                       
+                ])    
 
         for label in labels: 
                 label_dir = os.path.join(directory, str(label))
@@ -80,7 +49,7 @@ class VideoSinglePatchDataset(Dataset):
                     for filename in filenames:
                         file_path = os.path.join(root, filename)
                         self.samples.append((file_path, label))   
-        # print(f'self.samples {self.samples}\n')
+        # print(f'self.samples {len(self.samples)}\n')
 
         
     def __len__(self):
@@ -105,12 +74,12 @@ class VideoSinglePatchDataset(Dataset):
         parts = filename.split('_')     
         fps = float(parts[1])
         pixel = int(parts[2])  
-        velocity = 0
+        # velocity = 0
         if not self.velocity:
             bitrate = int(parts[-1].split('.')[0])  # Remove .png and convert to integer
         else:
             bitrate = int(parts[3])  
-            velocity = int(parts[-1].split('.')[0]) / 10000  # Remove .png and convert to integer
+            velocity = int(parts[-1].split('.')[0]) / 1000  # Remove .png and convert to integer
 
 
         fps = self.normalize(fps, self.min_fps, self.max_fps)
@@ -119,6 +88,10 @@ class VideoSinglePatchDataset(Dataset):
         # print(f'pixel {pixel}\n')
         bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
         # print(f'bitrate {bitrate}\n')
+        # TODO: normalize velocity
+        velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
+        # print(f'velocity {velocity}\n')
+
 
 
 
@@ -137,3 +110,5 @@ class VideoSinglePatchDataset(Dataset):
             return sample
         else:
             return sample
+
+

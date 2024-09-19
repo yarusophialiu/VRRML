@@ -30,13 +30,10 @@ class DeviceDataLoader():
             # b is the output of getitem in dataset, so b is a tuple of 5 elements
             # images_tensor, metadata, fps_target, resolution_target, image_bitrate
             # print(f'b {len(b)}')
-            # if isinstance(b, dict):
-            #     batch = {k: to_device(v, self.device) for k, v in b.items()}
-            # else:
-            #     # metadata = {k: to_device(v, self.device) for k, v in b[1].items()}
-            #     batch = tuple(to_device(v, self.device) for v in b)
-
-            batch = tuple(to_device(v, self.device) for v in b)
+            if isinstance(b, dict):
+                batch = {k: to_device(v, self.device) for k, v in b.items()}
+            else:
+                batch = tuple(to_device(v, self.device) for v in b)
             yield batch
             
     def __len__(self):
