@@ -40,34 +40,20 @@ class PatchDataset_mempmap(Dataset):
     # if batch size = 1, return 1 __getitem__ 
     # if batch size = 2, return 2 __getitem__
     def __getitem__(self, idx):
-        # print(f'\n=================== idx {idx} ===================')
         # subfolder = self.path_bitrate_folders[idx]
         images, metadata = [], []
         start_idx = idx * self.num_patches_per_subfolder
         end_idx = start_idx + self.num_patches_per_subfolder
-        # print(f'subfolder {subfolder} ')
         
         for i in range(start_idx, end_idx):
             image_data = self.image_memmap[i]
-            # print(f'image_data {image_data.shape} \ {image_data}')
-
             image = Image.fromarray(image_data)
-            # print(f'image {image}')
             if self.transform: # torchvision.transforms.ToTensor(), which automatically converts image data from the [0, 255] range (integers) to the [0, 1] range (floating-point values).
                 image = self.transform(image)
-                # print(f'image {image.size()}')
-
             images.append(image)
             metadata.append(self.metadata_memmap[i])
 
-        # combined_np_array = np.array(images)
-        # print(f'combined_np_array \n {combined_np_array}')
-
-        # images_tensor = torch.from_numpy(images) # torch.Size([200, 64, 64, 3])
-        # images_tensor = images_tensor.permute(0, 3, 1, 2)
         images_tensor = torch.stack(images)
-        # print(f'images_tensor \n {images_tensor}')
-
         combined_metadata_array = np.array(metadata)
         metadata_tensor = torch.from_numpy(combined_metadata_array) # torch.Size([200, 6])
 
@@ -115,10 +101,6 @@ if __name__ == "__main__":
             # print(f"metadata: {metadata.size()} ") #  \n {metadata}
             # print(f"idx: {idx} ")
             print(f'images {images.size()}')
-
-            # img_n = images * 255
-            # img_n = img_n.int()
-            # print(f'img_n {img_n.size()}')
             show_patches(images[0], num_patches=25)
 
             # Your training logic here...

@@ -30,12 +30,27 @@ def count_files_in_subfolders(root_directory):
     print(f'count_dir {count_dir}, count {count}')
 
 
+
+def count_files_in_folders(root_directory):
+    # Traverse the directory tree starting from the root directory
+    count = 0
+    count_dir = 0
+    for root in os.listdir(root_directory):
+        root_path = os.path.join(root_directory, root)
+        # print(f'root {root}')
+        file_count = len(os.listdir(root_path))
+        print(f'root {file_count} {root}')
+        count += file_count
+        count_dir += 1
+    print(f'count_dir {count_dir}, count {count}')
+
+
 if __name__ == '__main__':
     scene_arr = ["bistro"] # crytek_sponza, sibenik, room, bedroom
     base_directory = r'C:\Users\15142\Projects\VRR\Data\VRR_Patches\HPC\cleaned_patches'
-    base_directory = r'C:\Users\15142\Projects\VRR\Data\VRRML\ML'
+    base_directory = r'C:\Users\15142\Projects\VRR\Data\VRRML\ML_smaller\train\bedroom'
     for scene in scene_arr:
-        root_directory = f'{base_directory}/{scene}'
+        root_directory = f'{base_directory}/'
         print(f'root dir {root_directory}')
         count_files_in_subfolders(root_directory)
 
