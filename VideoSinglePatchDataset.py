@@ -38,7 +38,7 @@ class VideoSinglePatchDataset(Dataset):
         # print(f'self.min_bitrate, self.max_bitrate {self.min_bitrate, self.max_bitrate}')
         self.transform = transforms.Compose([
                     # CustomTransform(patch_size, TYPE) ,
-                    transforms.Resize((64, 64)),  # Resize images to 64x64
+                    transforms.Resize(patch_size),  # Resize images to 64x64
                     transforms.ToTensor(),  # Convert images to PyTorch tensors
                 ])    
 

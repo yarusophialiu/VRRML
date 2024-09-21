@@ -27,11 +27,11 @@ class DecRefClassification(ImageClassificationBase):
     def __init__(self, num_framerates, num_resolutions, VELOCITY=True):
         super().__init__()
         self.network = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size = 3, padding = 1),
+            nn.Conv2d(3, 32, kernel_size = 3, padding = 1), # input 128x128, output 128x128 cause padding is 1
             nn.ReLU(), 
-            nn.Conv2d(32,64, kernel_size = 3, stride = 1, padding = 1),  
+            nn.Conv2d(32,64, kernel_size = 3, stride = 1, padding = 1),  # Padding: 1 (which ensures the output has the same width and height as the input)
             nn.ReLU(), 
-            nn.MaxPool2d(2,2), 
+            nn.MaxPool2d(2,2), # the output should be 64
         
             nn.Conv2d(64, 128, kernel_size = 3, stride = 1, padding = 1), 
             nn.ReLU(),
@@ -43,10 +43,10 @@ class DecRefClassification(ImageClassificationBase):
             nn.ReLU(),
             nn.Conv2d(256,256, kernel_size = 3, stride = 1, padding = 1), 
             nn.ReLU(),
-            nn.MaxPool2d(2,2), 
+            nn.MaxPool2d(2,2), # output is 16, see official document to compute 
             
             nn.Flatten(),
-            nn.Linear(16384,1024), # output vector of size 1024 
+            nn.Linear(65536,1024), # output vector of size 1024, 65536 = 256 * 16 * 16 for 128x128, 16384 for 64x64
             nn.ReLU(),
             nn.Linear(1024, 512),
             nn.ReLU(),
@@ -79,7 +79,7 @@ class DecRefClassification(ImageClassificationBase):
 
         fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float()  # TODO dim=1 Example way to combine fps and bitrate
         # fps_resolution_bitrate = torch.stack([fps, bitrate, resolution], dim=1).float()  # Example way to combine fps and bitrate
-        # print(f'fps_resolution_bitrate {fps_resolution_bitrate}')
+        # print(f'fps_resolution_bitrate {fps_resolution_bitrate.size()} {fps_resolution_bitrate}')
 
         combined = torch.cat((features, fps_resolution_bitrate), dim=1)
         # print(f'combined {combined.size()}\n {combined}')               
