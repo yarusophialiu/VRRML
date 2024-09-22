@@ -14,8 +14,9 @@ from torch.utils.data import Dataset
 from datetime import datetime
 import torch.nn as nn
 import numpy as np
-import torch.nn.functional as F
-from PIL import Image
+# import torch.nn.functional as F
+# from PIL import Image
+from JOD import *
 
 
 
@@ -26,6 +27,11 @@ VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
 VRR_Patches = f'{VRRDATA}/VRR_Patches'
 VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
 VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
+VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
+
+# # iron
+# VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
+
 
 
 scene_arr = ['bedroom', 'bistro', 
@@ -64,6 +70,17 @@ transform = transforms.Compose([
 def count_files_in_folder(folder_path):
     return len([f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))])
 
+
+def get_jod_score(all_data, sheet_name, bitrate, fps, resolution):
+    """
+    Retrieves a JOD score from the nested dictionary using the specified sheet name, bitrate, fps, and resolution.
+    Returns 'Not Found' if any key is missing.
+    """
+    # print(type(all_data))
+    # print(type(bitrate))
+    # print(type(fps))
+    # print(type(resolution))
+    return all_data.get(sheet_name, {}).get(bitrate, {}).get(fps, {}).get(resolution, "Not Found")
 
 
 def show_patch(patch):
@@ -150,7 +167,7 @@ def get_default_device():
 def to_device(data, device):
     "Move data to the device"
     if isinstance(data,(list,tuple)):
-        return [to_device(x,device) for x in data]
+        return [to_device(x,device) if not isinstance(x, str) else x for x in data]
     return data.to(device,non_blocking = True)
 
 
@@ -214,34 +231,66 @@ def compute_weighted_loss(res_out, fps_out, res_targets, fps_targets):
     total_loss = loss_res + loss_fps
     return total_loss
 
+
+def find_key_by_value(dictionary, target_value):
+    # Loop through dictionary items
+    for key, value in dictionary.items():
+        if value == target_value:
+            return key
+    return None  # Return None if the value is not found
+
+
+fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
+res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
+bitrate_map = {500: 0.0, 1000: 0.333, 1500: 0.667, 2000: 1.0}
+
+
+def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targets):
+    # for i in range(fps_targets.size()[0]):
+    base_name = path.split('_path')[0]  # e.g., "crytek_sponza", "bistro", "gallery"
+    # print(f'\npath {path}, base_name {base_name}')
+
+    start_idx = path.find('path')
+    path_name = path[start_idx:]
+    # path_name = '_'.join(path.split('_')[1:])
+    variable_name = f"{base_name}_jod"
+    if variable_name in globals():
+        corresponding_value = globals()[variable_name]
+        fps_preds_val = find_key_by_value(fps_map, fps_preds)
+        res_preds_val = find_key_by_value(res_map, res_preds)
+        fps_targets_val = find_key_by_value(fps_map, fps_targets)
+        res_targets_val = find_key_by_value(res_map, res_targets)
+        bitrate_val = find_key_by_value(bitrate_map, round(bitrate, 3))
+
+        # print(f"{variable_name} fps, res preds {fps_preds_val, res_preds_val}")
+        # print(f"fps, res targets {fps_targets_val, res_targets_val}")
+        # print(f"path_name {path_name}, bitrate_val {bitrate_val}")
+        pred = get_jod_score(corresponding_value, path_name, bitrate_val, fps_preds_val, str(res_preds_val))
+        truth = get_jod_score(corresponding_value, path_name, bitrate_val, fps_targets_val, str(res_targets_val))
+        # print(f'pred {pred}, truth {truth}')
+        return abs(pred - truth)
+    else:
+        print(f"Variable {variable_name} does not exist")
+        return 0
+
     
-def compute_accuracy(fps_out, res_out, fps_targets, res_targets):
+def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, paths=None):
         # print(f'fps_out \n {}')
         _, fps_preds = torch.max(fps_out, dim=1)
-        # print(f'fps_preds \n {fps_preds}')
         _, res_preds = torch.max(res_out, dim=1)
-        # print(f'res_out \n {res_out}')
-        # print(f'res_preds \n {res_preds}')
 
         framerate_accuracy = torch.tensor(torch.sum(fps_preds == fps_targets).item() / len(fps_targets))
         resolution_accuracy = torch.tensor(torch.sum(res_preds == res_targets).item() / len(res_targets))
-
         both_correct_accuracy = torch.tensor(torch.sum((res_preds == res_targets) & (fps_preds == fps_targets)).item() / len(res_targets))
-
-  
-        # res_pred = torch.argmax(res_out, dim=1)
-        # fps_pred = torch.argmax(fps_out, dim=1)
-
-        # res_correct = (res_pred == res_targets).sum().item()
-        # fps_correct = (fps_pred == fps_targets).sum().item()
-        # both_correct = ((res_pred == res_targets) & (fps_pred == fps_targets)).sum().item()
-
-        # total_samples = len(res_targets)
-
-        # resolution_accuracy = res_correct / total_samples
-        # framerate_accuracy = fps_correct / total_samples
-        # both_correct_accuracy = both_correct / total_samples
-        return framerate_accuracy, resolution_accuracy, both_correct_accuracy
+        jod_loss = 0
+        # data_size = fps_targets.size()[0]
+        data_size = len(fps_targets)
+        if paths:
+            for i in range(data_size):
+                jod_loss += compute_JOD_loss(paths[i], bitrate[i].item(), fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
+            jod_loss /= data_size
+            # print(f'jod_loss {jod_loss} data_size {data_size}')
+        return framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_loss
 
 def plot_test_result(test_dl, predictions, epoch="", SAVE_PLOT=False):
     for batch in test_dl:

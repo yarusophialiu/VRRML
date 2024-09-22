@@ -31,7 +31,8 @@ class DeviceDataLoader():
             # images_tensor, metadata, fps_target, resolution_target, image_bitrate
             # print(f'b {len(b)}')
             if isinstance(b, dict):
-                batch = {k: to_device(v, self.device) for k, v in b.items()}
+                # batch = {k: to_device(v, self.device) for k, v in b.items()}
+                batch = {k: to_device(v, self.device) if not isinstance(v, str) else v for k, v in b.items()}
             else:
                 batch = tuple(to_device(v, self.device) for v in b)
             yield batch

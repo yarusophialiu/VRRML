@@ -16,7 +16,7 @@ std_velocity = 3676701.584
 
 # dataset: handling batching, shuffling, and iterations over the dataset during training or inference
 class VideoSinglePatchDataset(Dataset):
-    def __init__(self, directory, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, SINGLE_INPUT=False):
+    def __init__(self, directory, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, VALIDATION=False):
         self.root_directory = directory
         self.patch_size = patch_size
         self.velocity = VELOCITY
@@ -33,6 +33,7 @@ class VideoSinglePatchDataset(Dataset):
 
         self.min_bitrate = min_bitrate
         self.max_bitrate = max_bitrate
+        self.validation = VALIDATION
 
         # print(f'TYPE {TYPE}')
         # print(f'self.min_bitrate, self.max_bitrate {self.min_bitrate, self.max_bitrate}')
@@ -59,6 +60,8 @@ class VideoSinglePatchDataset(Dataset):
         # print(f'val, min_vals, max_vals {sample, min_vals, max_vals}')
         sample = (sample - min_vals) / (max_vals - min_vals)
         return round(sample, 3)
+    
+
     
     # load individual data sample, apply transformations, 
     # if batch size = 1, return 1 __getitem__ 
@@ -93,22 +96,25 @@ class VideoSinglePatchDataset(Dataset):
         # print(f'velocity {velocity}\n')
 
 
-
-
         image = Image.open(img_path)
         if self.transform:
             image = self.transform(image)
             # print(f'image.size {image.size()}')
             # image.show()
         sample = {"image": image, "fps": fps, "bitrate": bitrate, "resolution": pixel, \
-                  "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets]}
+                  "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], 'velocity': velocity}
         
         # print(f'self.velocity {self.velocity}')
-        if self.velocity:
-            sample['velocity'] = velocity
+        if self.validation:
+            path = '_'.join(parts[4:-1])
+            # print(f'path {path}')
+            sample['path'] = path
             # print(f'velocity {velocity}')
             return sample
         else:
             return sample
+        
+        # if self.validation:
+
 
 

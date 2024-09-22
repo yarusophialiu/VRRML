@@ -20,6 +20,8 @@ from VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
 from DecRefClassification import *
+# from torch.utils.tensorboard import SummaryWriter
+
 
 # regressin, learn the curves
 # https://docs.google.com/presentation/d/16yqaaq5zDZ5-S4394VLBUfxpNjM7nlpssqcShFkklec/edit#slide=id.g2c751bc0d9c_0_18
@@ -58,7 +60,7 @@ def evaluate(model, val_loader):
     model.eval()
     outputs = [model.validation_step(batch) for batch in val_loader]
     # print(f'eval outputs \n {outputs}')
-    return model.validation_epoch_end(outputs)
+    return model.validation_epoch_end(outputs) # get loss dictionary
 
 
 def evaluate_test_data(model, test_loader):
@@ -107,12 +109,20 @@ def evaluate_test_data(model, test_loader):
                         res_values, fps_values, unique_indices
 
 
-def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=False, VELOCITY=False):
+def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=False):
     print(f'fit VELOCITY {VELOCITY}')
     history = []
-    train_accuracies = []
-    val_accuracies = []
     optimizer = opt_func(model.parameters(),lr)
+    running_loss = 0.0
+
+    model_path = ""
+    if SAVE_MODEL or SAVE_HALFWAY:
+        now = datetime.now()
+        dir_pth = now.strftime("%Y-%m-%d")
+        os.makedirs(dir_pth, exist_ok=True)
+        hrmin = now.strftime("%H_%M")
+        model_path = os.path.join(dir_pth, hrmin)
+
 
     # an epoch is one pass through the entire dataset
     for epoch in range(epochs):
@@ -129,31 +139,51 @@ def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=F
         # do all batches cover the whole dataset?
         for batch in train_loader: # batch is a dictionary with 32 images information, e.g. 'fps': [70, 80, ..., 150]
             # print(f'batch {batch[fps]}')
-            print(f'=============== batch {count} ===============') # train_size / batch_size
+            # print(f'=============== batch {count} ===============') # train_size / batch_size
             count += 1
-            images= batch['image']
+            # images= batch['image']
             # print(f"Input batch shape: {images.size()}")
             # get accuracy
             loss = model.training_step(batch, VELOCITY=VELOCITY) # model
             train_losses.append(loss)
+            running_loss += loss.item()
 
             # computes the gradient of the loss with respect to the model parameters
             # part of the backpropagation algorithm, which is how the neural network learns
             loss.backward()  
-            # update the model parameters based on the gradients calculated
-            optimizer.step()
-            # clears the old gradients, so they don't accumulate
-            optimizer.zero_grad()
-            
-        result = evaluate(model, val_loader)
+            optimizer.step() # update the model parameters based on the gradients calculated
+            optimizer.zero_grad() # clears the old gradients, so they don't accumulate
+
+        avg_train_loss = running_loss / len(train_loader) # len(train_loader) is number of batches
+        print(f'len(train_loader) {len(train_loader)}, avg_train_loss {avg_train_loss}')
+
+        result = evaluate(model, val_loader) # val_loss val_res_acc val_fps_acc val_both_acc
+        # avg_val_loss = result['val_loss'] / len(val_loader)
+        # avg_val_res_acc = result['val_res_acc'] / len(val_loader)
+        # avg_val_fps_acc = result['val_fps_acc'] / len(val_loader)
+        # avg_val_both_acc = result['val_both_acc'] / len(val_loader)
+        # # Log training and validation metrics to TensorBoard
+        # writer.add_scalar('Loss/train', avg_train_loss, epoch)
+        # writer.add_scalar('Loss/validation', avg_val_loss, epoch)
+        # writer.add_scalar('Accuracy/val_res_acc', avg_val_res_acc, epoch)
+        # writer.add_scalar('Accuracy/val_fps_acc', avg_val_fps_acc, epoch)
+        # writer.add_scalar('Accuracy/val_both_acc', avg_val_both_acc, epoch)
+
         # print(f'result \n {result}')
         result['train_loss'] = torch.stack(train_losses).mean().item()
+        # print(f'len(val_loader) {len(val_loader)}, avg_train_loss {avg_train_loss} {torch.stack(train_losses).mean().item()}')
+
         model.epoch_end(epoch, result)
         history.append(result)
 
-        if SAVE and epoch % 10 == 0:
+        if SAVE_HALFWAY and epoch % 10 == 0 and epoch > 0:
+            os.makedirs(model_path, exist_ok=True)
             print(f"Epoch {epoch} is a multiple of 20.")
-            # save_checkpoint(model, optimizer,  f'{save_path}/checkpoint{epoch}.pth', epoch)
+            save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
+        
+    if SAVE_MODEL:
+        os.makedirs(model_path, exist_ok=True)
+        torch.save(model.state_dict(), f'{model_path}/classification.pth')
     
     return history
 
@@ -161,9 +191,9 @@ def fit(epochs, lr, model, train_loader, val_loader, save_path, opt_func, SAVE=F
 # fps useful, resolution not useful
 # OLD from the last VRRML on desktop
 if __name__ == "__main__":
-    folder = 'ML_smaller'
-    data_train_directory = f'{VRRML}/{folder}/train_label' # ML_smaller
-    data_val_directory = f'{VRRML}/{folder}/validation_label' 
+    folder = 'ML/reference128x128'
+    data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
+    data_val_directory = f'{VRRML}/{folder}/validation' 
 
     SAVE_MODEL = False
     SAVE_MODEL_HALF_WAY = False
@@ -173,19 +203,20 @@ if __name__ == "__main__":
     SAVE_PLOT = True
     TEST_SINGLE_IMG = False
 
-    num_epochs = 6
-    lr = 0.001
+    num_epochs = 1
+    lr = 0.005
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 3
+    batch_size = 64
+    patch_size = (128, 128)
 
     num_framerates, num_resolutions = 10, 5
-    TYPE = "reference"
     VELOCITY = True
+    VALIDATION = True
 
     # step1 load data
-    dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, VELOCITY=VELOCITY) # len 27592
-    val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, VELOCITY=VELOCITY) # len 27592
+    dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
+    val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
     # test_dataset = VideoSinglePatchDataset(directory=data_test_directory, TYPE=TYPE, VELOCITY=VELOCITY) 
     train_size = len(dataset)
     val_size = len(val_dataset)
@@ -196,9 +227,10 @@ if __name__ == "__main__":
     print(f"Train dataset res labels are: \n{dataset.res_targets}\n")
     print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}")
     print(f"Validation dataset res labels are: \n{val_dataset.res_targets}\n")
-    sample = dataset[0]
+    sample = val_dataset[0]
     print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
     print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
+    print(f'sample path is {sample["path"]}') if VELOCITY else None
 
     device = get_default_device()
     cuda  = device.type == 'cuda'
@@ -222,21 +254,12 @@ if __name__ == "__main__":
             val_dl = DeviceDataLoader(val_dl, device)
             to_device(model, device)
 
-        model_path = ""
-        if SAVE_MODEL:
-            now = datetime.now()
-            dir_pth = now.strftime("%Y-%m-%d")
-            os.makedirs(dir_pth, exist_ok=True)
-            hrmin = now.strftime("%H_%M")
-            model_path = os.path.join(dir_pth, hrmin)
-            os.makedirs(model_path, exist_ok=True)
-            
+        # Initialize TensorBoard writer
+        # writer = SummaryWriter('runs/VRRML')
         # fitting the model on training data and record the result after each epoch
-        history = fit(num_epochs, lr, model, train_dl, val_dl, model_path, opt_func, \
-                      SAVE=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY)
-        
-        if SAVE_MODEL:
-            torch.save(model.state_dict(), f'{model_path}/classification_{TYPE}.pth')
+        history = fit(num_epochs, lr, model, train_dl, val_dl, opt_func, SAVE_MODEL=SAVE_MODEL, SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY)
+        # writer.close()
+
 
     if TEST_EVAL:
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
