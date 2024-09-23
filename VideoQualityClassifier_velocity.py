@@ -183,7 +183,7 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
     if SAVE_MODEL:
         os.makedirs(model_path, exist_ok=True)
         torch.save(model.state_dict(), f'{model_path}/classification.pth')
-    
+    print(f'model_path {model_path}')
     return history
 
 # input image 64x64, decocded OR reference patch
