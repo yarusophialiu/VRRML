@@ -20,7 +20,7 @@ from VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
 from DecRefClassification import *
-# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 
 # regressin, learn the curves
@@ -109,11 +109,12 @@ def evaluate_test_data(model, test_loader):
                         res_values, fps_values, unique_indices
 
 
-def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=False):
+def fit(epochs, model, train_loader, val_loader, optimizer, \
+                SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=False, CHECKPOINT=False):
     print(f'fit VELOCITY {VELOCITY}')
     history = []
-    optimizer = opt_func(model.parameters(),lr)
-    running_loss = 0.0
+    # optimizer = opt_func(model.parameters(),lr)
+    # running_loss = 0.0
 
     model_path = ""
     if SAVE_MODEL or SAVE_HALFWAY:
@@ -125,11 +126,12 @@ def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False,
 
 
     # an epoch is one pass through the entire dataset
-    for epoch in range(epochs):
+    for epoch in epochs:
         print(f'================================ epoch {epoch} ================================')
         model.train()
         train_losses = []
         count = 0
+        running_loss = 0.0
         # for each batch, compute gradients for every data
         # after the batch finishes, evaluate
         # requests an iterator from DeviceDataLoader, i.e. __iter__ function
@@ -155,22 +157,19 @@ def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False,
             optimizer.zero_grad() # clears the old gradients, so they don't accumulate
 
         avg_train_loss = running_loss / len(train_loader) # len(train_loader) is number of batches
-        print(f'len(train_loader) {len(train_loader)}, avg_train_loss {avg_train_loss}')
 
         result = evaluate(model, val_loader) # val_loss val_res_acc val_fps_acc val_both_acc
-        # avg_val_loss = result['val_loss'] / len(val_loader)
-        # avg_val_res_acc = result['val_res_acc'] / len(val_loader)
-        # avg_val_fps_acc = result['val_fps_acc'] / len(val_loader)
-        # avg_val_both_acc = result['val_both_acc'] / len(val_loader)
-        # # Log training and validation metrics to TensorBoard
+        # Log training and validation metrics to TensorBoard
         # writer.add_scalar('Loss/train', avg_train_loss, epoch)
-        # writer.add_scalar('Loss/validation', avg_val_loss, epoch)
-        # writer.add_scalar('Accuracy/val_res_acc', avg_val_res_acc, epoch)
-        # writer.add_scalar('Accuracy/val_fps_acc', avg_val_fps_acc, epoch)
-        # writer.add_scalar('Accuracy/val_both_acc', avg_val_both_acc, epoch)
+        writer.add_scalar('Loss/validation', result['val_loss'], epoch)
+        writer.add_scalar('Accuracy/val_res_acc', result['val_res_acc'], epoch)
+        writer.add_scalar('Accuracy/val_fps_acc', result['val_fps_acc'], epoch)
+        writer.add_scalar('Accuracy/val_both_acc', result['val_both_acc'], epoch)
+        writer.add_scalar('Loss/jod_loss', result['jod_loss'], epoch)
 
         # print(f'result \n {result}')
         result['train_loss'] = torch.stack(train_losses).mean().item()
+        writer.add_scalar('Loss/train', result['train_loss'], epoch)
         # print(f'len(val_loader) {len(val_loader)}, avg_train_loss {avg_train_loss} {torch.stack(train_losses).mean().item()}')
 
         model.epoch_end(epoch, result)
@@ -178,7 +177,7 @@ def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False,
 
         if SAVE_HALFWAY and epoch % 10 == 0 and epoch > 0:
             os.makedirs(model_path, exist_ok=True)
-            print(f"Epoch {epoch} is a multiple of 20.")
+            print(f"Epoch {epoch} is a multiple of 10.")
             save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
         
     if SAVE_MODEL:
@@ -191,28 +190,29 @@ def fit(epochs, lr, model, train_loader, val_loader, opt_func, SAVE_MODEL=False,
 # fps useful, resolution not useful
 # OLD from the last VRRML on desktop
 if __name__ == "__main__":
-    folder = 'ML/reference128x128'
+    folder = 'ML/reference128x128' # TODO change model size
     data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
     data_val_directory = f'{VRRML}/{folder}/validation' 
 
-    SAVE_MODEL = False
-    SAVE_MODEL_HALF_WAY = False
+    SAVE_MODEL = True
+    SAVE_MODEL_HALF_WAY = True
     START_TRAINING= True # True False
     TEST_EVAL = False
     PLOT_TEST_RESULT = False
     SAVE_PLOT = True
     TEST_SINGLE_IMG = False
 
-    num_epochs = 1
-    lr = 0.005
+    num_epochs = 16
+    lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 64
-    patch_size = (128, 128)
+    batch_size = 128 # TODO
+    patch_size = (128, 128) # TODO
 
     num_framerates, num_resolutions = 10, 5
     VELOCITY = True
     VALIDATION = True
+    CHECKPOINT = True
 
     # step1 load data
     dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
@@ -231,20 +231,29 @@ if __name__ == "__main__":
     print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
     print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
     print(f'sample path is {sample["path"]}') if VELOCITY else None
+    print(f'learning rate {lr}, batch_size {batch_size}')
 
     device = get_default_device()
     cuda  = device.type == 'cuda'
 
     if START_TRAINING:
         # step2 split data and prepare batches
-        # train_data, val_data = random_split(dataset,[train_size,val_size])
-        # print(f"Length of Train Data : {len(train_data)}")
-        # print(f"Length of Validation Data : {len(val_data)} \n")
-
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-        # print(model)
+        optimizer = opt_func(model.parameters(),lr)
+        epochs = num_epochs
+        if CHECKPOINT:
+            checkpoint = torch.load('2024-09-22/128_3e-1/checkpoint10.pth')
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            # epoch = checkpoint['epoch']
+            epoch = 10
+            epochs = range(epoch+1, num_epochs)
+            print(f'epochs {epochs}')
+            for state in optimizer.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.to(device)
 
-        # dataloader gives batch
         train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
         val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
         
@@ -254,11 +263,11 @@ if __name__ == "__main__":
             val_dl = DeviceDataLoader(val_dl, device)
             to_device(model, device)
 
-        # Initialize TensorBoard writer
-        # writer = SummaryWriter('runs/VRRML')
+        writer = SummaryWriter('runs/VRRML')
         # fitting the model on training data and record the result after each epoch
-        history = fit(num_epochs, lr, model, train_dl, val_dl, opt_func, SAVE_MODEL=SAVE_MODEL, SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY)
-        # writer.close()
+        history = fit(epochs, model, train_dl, val_dl, optimizer, SAVE_MODEL=SAVE_MODEL, \
+                        SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY, CHECKPOINT=CHECKPOINT)
+        writer.close()
 
 
     if TEST_EVAL:
