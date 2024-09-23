@@ -193,6 +193,7 @@ if __name__ == "__main__":
     folder = 'ML/reference128x128' # TODO change model size
     data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
     data_val_directory = f'{VRRML}/{folder}/validation' 
+    data_test_directory = f'{VRRML}/{folder}/test' 
 
     SAVE_MODEL = True
     SAVE_MODEL_HALF_WAY = True
@@ -214,19 +215,11 @@ if __name__ == "__main__":
     VALIDATION = True
     CHECKPOINT = True
 
-    # step1 load data
     dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
     val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
-    # test_dataset = VideoSinglePatchDataset(directory=data_test_directory, TYPE=TYPE, VELOCITY=VELOCITY) 
-    train_size = len(dataset)
-    val_size = len(val_dataset)
-    # print(f'total data {len(dataset)}, batch_size {batch_size}')
-    print(f'train_size {train_size}, val_size {val_size}, batch_size {batch_size}\n')
-    # print(f"Train dataset  labels are: \n{dataset.labels}")
-    print(f"Train dataset fps labels are: \n{dataset.fps_targets}")
-    print(f"Train dataset res labels are: \n{dataset.res_targets}\n")
-    print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}")
-    print(f"Validation dataset res labels are: \n{val_dataset.res_targets}\n")
+    print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
+    print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
+    print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
     sample = val_dataset[0]
     print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
     print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
@@ -237,7 +230,6 @@ if __name__ == "__main__":
     cuda  = device.type == 'cuda'
 
     if START_TRAINING:
-        # step2 split data and prepare batches
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
         optimizer = opt_func(model.parameters(),lr)
         epochs = num_epochs
@@ -256,7 +248,6 @@ if __name__ == "__main__":
 
         train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
         val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
-        
         if device.type == 'cuda':
             print(f'Loading data to cuda...')
             train_dl = DeviceDataLoader(train_dl, device)
@@ -271,47 +262,44 @@ if __name__ == "__main__":
 
 
     if TEST_EVAL:
+        test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
+        print(f'test_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-        model_path = f'2024-05-06/17_02/classification_reference.pth'
+        model_path = f'models/patch128_batch128.pth'
         model.load_state_dict(torch.load(model_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        print(f'test_dataset {len(test_dataset)}')
+        # model.to(device)
         test_dl = DataLoader(test_dataset, len(test_dataset))
         if device.type == 'cuda':
             print(f'\nLoading data to cuda...')
             test_dl = DeviceDataLoader(test_dl, device)
             to_device(model, device)
 
-
-        # {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
-                    # 'both_acc': both_correct_accuracy} 
-
-        result, res_out, fps_out, res_targets, fps_targets, \
-            res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
+        # result, res_out, fps_out, res_targets, fps_targets, \
+        #     res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
         
-        # unique_indices_arr = [val for k, val in unique_indices.items()]
-        bitrate_predictions = {}
-        # print(f"First indices of unique values: {unique_indices}")
+        # # unique_indices_arr = [val for k, val in unique_indices.items()]
+        # bitrate_predictions = {}
+        # # print(f"First indices of unique values: {unique_indices}")
 
-        res_values = torch.tensor(res_values)
-        fps_values = torch.tensor(fps_values)
+        # res_values = torch.tensor(res_values)
+        # fps_values = torch.tensor(fps_values)
 
-        for k, val in unique_indices.items():
-            bitrate_predictions[k] = []
-            bitrate_predictions[k].append(res_values[val].item())
-            bitrate_predictions[k].append(fps_values[val].item())
+        # for k, val in unique_indices.items():
+        #     bitrate_predictions[k] = []
+        #     bitrate_predictions[k].append(res_values[val].item())
+        #     bitrate_predictions[k].append(fps_values[val].item())
 
-        print(f'test result \n {result}\n')
-        # print(f'res_out \n {res_out}')
-        # print(f'fps_out \n {fps_out}')
-        # print(f'res_targets \n {res_targets}')
-        # print(f'fps_targets \n {fps_targets}')
-        # print(f'res_values \n {(res_values)}')
-        # print(f'res_values \n {torch.unique(res_values)}\n')
-        # print(f'fps_values \n {(fps_values)}')
-        # print(f'fps_values \n {torch.unique(fps_values)}\n')
-        print(f'bitrate_predictions \n {bitrate_predictions}')
+        # print(f'test result \n {result}\n')
+        # # print(f'res_out \n {res_out}')
+        # # print(f'fps_out \n {fps_out}')
+        # # print(f'res_targets \n {res_targets}')
+        # # print(f'fps_targets \n {fps_targets}')
+        # # print(f'res_values \n {(res_values)}')
+        # # print(f'res_values \n {torch.unique(res_values)}\n')
+        # # print(f'fps_values \n {(fps_values)}')
+        # # print(f'fps_values \n {torch.unique(fps_values)}\n')
+        # print(f'bitrate_predictions \n {bitrate_predictions}')
 
 
      
