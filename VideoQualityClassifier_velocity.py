@@ -68,44 +68,44 @@ def evaluate_test_data(model, test_loader):
     with torch.no_grad():  # Ensure gradients are not computed
         for batch in test_loader:
             images = batch["image"]
-            # labels = batch["label"]
             fps = batch["fps"]
             bitrate = batch["bitrate"]
             resolution = batch["resolution"]
-            # velocity = batch["velocity"]
-        
-            print(f'bitrate {bitrate}')
+            velocity = batch["velocity"]
+            res_targets = batch["res_targets"]
+            fps_targets = batch["fps_targets"]
+            path = batch["path"]
+            # print(f'bitrate {bitrate.size()}')
 
-            # arr = [30, 30, 30, 40, 40, 50, 50, 50]
-            # tensor = torch.tensor(arr)
             unique_indices = {}
-
             # Iterate over the tensor and populate the dictionary
             for index, value in enumerate(bitrate.tolist()):
                 if value not in unique_indices:
                     unique_indices[value] = index
 
-            # TODO: convert labels into res_targets, fps_targets 
-            res_targets = batch["res_targets"]
-            fps_targets = batch["fps_targets"]
-            res_out, fps_out = model(images, fps, bitrate, resolution)  # NaturalSceneClassification.forward
+            res_out, fps_out = model(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
             # print(f'training_step out {out.size()} \n {out.squeeze()}')
             # print(f'labels out {labels}')
             total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
-            framerate_accuracy, resolution_accuracy, both_correct_accuracy = compute_accuracy(fps_out, res_out, fps_targets, res_targets)
-
+            framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_loss = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+            # result = {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
+            #     'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)} 
+            # print(f'result {result}')
             fps = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
             resolution = [360, 480, 720, 864, 1080]
 
-            fps_idx = torch.argmax(fps_out, dim=1)
+            fps_idx = torch.argmax(fps_out, dim=1) # fps_out is a probabiblity, of size eg. (8, 10)
             res_idx = torch.argmax(res_out, dim=1)
+            # print(f'fps_idx {fps_idx}')
 
             fps_values = [fps[idx] for idx in fps_idx]
             res_values = [resolution[idx] for idx in res_idx]
-
+            # print(f'fps_values {fps_values}')
+            res_values = torch.tensor(res_values)
+            fps_values = torch.tensor(fps_values)
 
             return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
-                    'both_acc': both_correct_accuracy}, res_out, fps_out, res_targets, fps_targets, \
+                    'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)}, res_out, fps_out, res_targets, fps_targets, \
                         res_values, fps_values, unique_indices
 
 
@@ -114,8 +114,6 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
     print(f'fit VELOCITY {VELOCITY}')
     history = []
     # optimizer = opt_func(model.parameters(),lr)
-    # running_loss = 0.0
-
     model_path = ""
     if SAVE_MODEL or SAVE_HALFWAY:
         now = datetime.now()
@@ -123,7 +121,6 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
         os.makedirs(dir_pth, exist_ok=True)
         hrmin = now.strftime("%H_%M")
         model_path = os.path.join(dir_pth, hrmin)
-
 
     # an epoch is one pass through the entire dataset
     for epoch in epochs:
@@ -156,8 +153,7 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
             optimizer.step() # update the model parameters based on the gradients calculated
             optimizer.zero_grad() # clears the old gradients, so they don't accumulate
 
-        avg_train_loss = running_loss / len(train_loader) # len(train_loader) is number of batches
-
+        # avg_train_loss = running_loss / len(train_loader) # len(train_loader) is number of batches
         result = evaluate(model, val_loader) # val_loss val_res_acc val_fps_acc val_both_acc
         # Log training and validation metrics to TensorBoard
         # writer.add_scalar('Loss/train', avg_train_loss, epoch)
@@ -186,34 +182,43 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
     print(f'model_path {model_path}')
     return history
 
-# input image 64x64, decocded OR reference patch
-# fps useful, resolution not useful
+
+
 # OLD from the last VRRML on desktop
 if __name__ == "__main__":
-    folder = 'ML/reference128x128' # TODO change model size
-    data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
-    data_val_directory = f'{VRRML}/{folder}/validation' 
-    data_test_directory = f'{VRRML}/{folder}/test' 
-
     SAVE_MODEL = True
-    SAVE_MODEL_HALF_WAY = True
-    START_TRAINING= True # True False
-    TEST_EVAL = False
+    SAVE_MODEL_HALF_WAY = False
+    START_TRAINING= False # True False
+    TEST_EVAL = True
     PLOT_TEST_RESULT = False
     SAVE_PLOT = True
     TEST_SINGLE_IMG = False
+    TEST_UNSEEN_SCENE = False # True
+    
+    model_pth_path = ""
+    folder = 'ML/reference128x128' # TODO change model size reference128x128
+    if TEST_UNSEEN_SCENE:
+        print(f'test on unseen scenes')
+        data_test_directory = f'{VRRML}/ML/test_scenes128x128' 
+    else:
+        data_test_directory = f'{VRRML}/{folder}/test'
+    data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
+    data_val_directory = f'{VRRML}/{folder}/validation'  
+
+    if TEST_EVAL:
+        model_pth_path = f'models/old/patch128_batch256.pth' # patch128_batch128 patch256_batch64
 
     num_epochs = 16
     lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 128 # TODO
-    patch_size = (128, 128) # TODO
+    batch_size = 256 # TODO
+    patch_size = (128, 128) # TODO, change patch structure in DecRefClassification.py
 
     num_framerates, num_resolutions = 10, 5
     VELOCITY = True
     VALIDATION = True
-    CHECKPOINT = True
+    CHECKPOINT = False
 
     dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
     val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
@@ -232,7 +237,7 @@ if __name__ == "__main__":
     if START_TRAINING:
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
         optimizer = opt_func(model.parameters(),lr)
-        epochs = num_epochs
+        epochs = range(num_epochs)
         if CHECKPOINT:
             checkpoint = torch.load('2024-09-22/128_3e-1/checkpoint10.pth')
             model.load_state_dict(checkpoint['model_state_dict'])
@@ -240,12 +245,11 @@ if __name__ == "__main__":
             # epoch = checkpoint['epoch']
             epoch = 10
             epochs = range(epoch+1, num_epochs)
-            print(f'epochs {epochs}')
             for state in optimizer.state.values():
                 for k, v in state.items():
                     if isinstance(v, torch.Tensor):
                         state[k] = v.to(device)
-
+        print(f'epochs {epochs}')
         train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
         val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
         if device.type == 'cuda':
@@ -261,45 +265,35 @@ if __name__ == "__main__":
         writer.close()
 
 
-    if TEST_EVAL:
+    if TEST_EVAL: # test data size 35756
         test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
-        print(f'test_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
+        print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-        model_path = f'models/patch128_batch128.pth'
-        model.load_state_dict(torch.load(model_path))
+        # model_pth_path = f'models/patch128_batch256.pth' # patch128_batch128 patch256_batch64
+        model.load_state_dict(torch.load(model_pth_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # model.to(device)
-        test_dl = DataLoader(test_dataset, len(test_dataset))
+        # test_dl = DataLoader(test_dataset, len(test_dataset))
+        test_dl = DataLoader(test_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
+
         if device.type == 'cuda':
-            print(f'\nLoading data to cuda...')
+            print(f'Loading data to cuda...')
             test_dl = DeviceDataLoader(test_dl, device)
             to_device(model, device)
 
-        # result, res_out, fps_out, res_targets, fps_targets, \
-        #     res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
+        print(f'model_path {model_pth_path}')
+        result, res_out, fps_out, res_targets, fps_targets, \
+                        res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
         
         # # unique_indices_arr = [val for k, val in unique_indices.items()]
         # bitrate_predictions = {}
         # # print(f"First indices of unique values: {unique_indices}")
-
-        # res_values = torch.tensor(res_values)
-        # fps_values = torch.tensor(fps_values)
 
         # for k, val in unique_indices.items():
         #     bitrate_predictions[k] = []
         #     bitrate_predictions[k].append(res_values[val].item())
         #     bitrate_predictions[k].append(fps_values[val].item())
 
-        # print(f'test result \n {result}\n')
-        # # print(f'res_out \n {res_out}')
-        # # print(f'fps_out \n {fps_out}')
-        # # print(f'res_targets \n {res_targets}')
-        # # print(f'fps_targets \n {fps_targets}')
-        # # print(f'res_values \n {(res_values)}')
-        # # print(f'res_values \n {torch.unique(res_values)}\n')
-        # # print(f'fps_values \n {(fps_values)}')
-        # # print(f'fps_values \n {torch.unique(fps_values)}\n')
-        # print(f'bitrate_predictions \n {bitrate_predictions}')
-
+        print(f'test result \n {result}\n')
 
      
