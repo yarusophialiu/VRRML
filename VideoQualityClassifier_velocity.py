@@ -206,13 +206,13 @@ if __name__ == "__main__":
     data_val_directory = f'{VRRML}/{folder}/validation'  
 
     if TEST_EVAL:
-        model_pth_path = f'models/old/patch128_batch256.pth' # patch128_batch128 patch256_batch64
+        model_pth_path = f'models/patch128_batch128.pth' # patch128_batch128 patch256_batch64
 
     num_epochs = 16
     lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 256 # TODO
+    batch_size = 8 # TODO
     patch_size = (128, 128) # TODO, change patch structure in DecRefClassification.py
 
     num_framerates, num_resolutions = 10, 5
@@ -274,7 +274,7 @@ if __name__ == "__main__":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # model.to(device)
         # test_dl = DataLoader(test_dataset, len(test_dataset))
-        test_dl = DataLoader(test_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
+        test_dl = DataLoader(test_dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
 
         if device.type == 'cuda':
             print(f'Loading data to cuda...')
@@ -284,15 +284,43 @@ if __name__ == "__main__":
         print(f'model_path {model_pth_path}')
         result, res_out, fps_out, res_targets, fps_targets, \
                         res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
+        _, fps_preds = torch.max(fps_out, dim=1)
+        _, res_preds = torch.max(res_out, dim=1)
+        # print(f'res_preds {res_preds}')
+        # print(f'res_targets {res_targets}\n')
         
-        # # unique_indices_arr = [val for k, val in unique_indices.items()]
-        # bitrate_predictions = {}
-        # # print(f"First indices of unique values: {unique_indices}")
+        reverse_fps_map = {v: k for k, v in fps_map.items()}
+        reverse_res_map = {v: k for k, v in res_map.items()}
 
-        # for k, val in unique_indices.items():
-        #     bitrate_predictions[k] = []
-        #     bitrate_predictions[k].append(res_values[val].item())
-        #     bitrate_predictions[k].append(fps_values[val].item())
+        # Convert the predicted and target indices to actual values
+        predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
+        target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
+
+        predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
+        target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
+        # print(f'predicted_res {predicted_res}')
+        # print(f'target_res {target_res}')
+
+        absolute_errors_fps = torch.abs(predicted_fps - target_fps)
+        absolute_errors_res = torch.abs(predicted_res - target_res)
+        # print(f'absolute_errors_res {absolute_errors_res}\n')
+        expected_error_fps = torch.mean(absolute_errors_fps.float())
+        expected_error_res = torch.mean(absolute_errors_res.float())
+        # print(f"Expected Error vertical resolution (Mean Absolute Error): {expected_error_res.item()}\n")
+        # print(f"Expected Error fps (Mean Absolute Error): {expected_error_fps.item()}")
+
+        # Compute the absolute percentage error
+        # print(f'predicted_fps {predicted_fps}')
+        percentage_errors_fps = torch.abs((predicted_fps - target_fps) / target_fps) * 100
+        percentage_errors_res = torch.abs((predicted_res - target_res) / target_res) * 100
+        # print(f"percentage_errors_fps: {percentage_errors_fps}") 
+        # print(f"percentage_errors_res: {percentage_errors_res}\n") 
+
+        # Compute the mean absolute percentage error (MAPE)
+        mape_fps = torch.mean(percentage_errors_fps.float())
+        mape_res = torch.mean(percentage_errors_res.float())
+        print(f"FPS: Mean Absolute Error {expected_error_fps.item()}, Mean Absolute Percentage Error (MAPE): {round(mape_fps.item(), 3)}%")
+        print(f"Resolution: Mean Absolute Error {expected_error_res.item()}, Mean Absolute Percentage Error (MAPE): {round(mape_res.item(), 3)}%\n")
 
         print(f'test result \n {result}\n')
 
