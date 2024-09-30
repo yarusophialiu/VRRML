@@ -1,9 +1,9 @@
+import time
 import torch
 from fastapi import FastAPI
 # from VideoQualityClassifier_velocity import *
 from pydantic import BaseModel
 from DecRefClassification import *
-from typing import List
 from VideoSinglePatchDataset import VideoSinglePatchDataset
 import base64
 from utils import reverse_fps_map, reverse_res_map
@@ -13,7 +13,7 @@ app = FastAPI()
 SAMPLE_DATA = False
 
 num_framerates, num_resolutions = 10, 5
-model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=True)
+model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=True) # 68,778,031 parameters， 68,777,999
 model_pth_path = f'{VRRML_Project}/models/patch128-256/patch128_batch128.pth'
 model.load_state_dict(torch.load(model_pth_path))  # Load the trained model weights
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -42,6 +42,8 @@ class PredictionInput(BaseModel):
 
 @app.post("/predict")
 async def predict(input_data: PredictionInput):
+    start_time = time.time()
+
     if SAMPLE_DATA:
         patch_tensor = torch.tensor(input_data.patch, dtype=torch.float32)
 
@@ -58,7 +60,7 @@ async def predict(input_data: PredictionInput):
     velocity_tensor = torch.tensor(input_data.velocity, dtype=torch.float32).unsqueeze(0)
     fps_tensor = torch.tensor(166, dtype=torch.float32).unsqueeze(0) # torch.Size([1])
     resolution_tensor = torch.tensor(1080, dtype=torch.float32).unsqueeze(0)
-    bitrate_tensor = torch.tensor(500, dtype=torch.float32).unsqueeze(0)
+    bitrate_tensor = torch.tensor(500, dtype=torch.float32).unsqueeze(0) # TODO
     # print(f'velocity_tensor {velocity_tensor.size()}') # torch.Size([1])
 
     velocity_tensor = velocity_tensor.to(device)  # or .cuda()
@@ -67,6 +69,15 @@ async def predict(input_data: PredictionInput):
     bitrate_tensor = bitrate_tensor.to(device)  # or .cuda()
     patch_tensor = patch_tensor.to(device)
 
+    end_time = time.time()
+    inference_time = end_time - start_time
+    print(f'Preprocess before inference time: {inference_time:.4f} seconds')
+
+    # CUDA event-based timing
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    start_event.record()
+
     # Forward pass through the model to get predictions
     with torch.no_grad():  # No gradient computation needed
         res_out, fps_out = model(patch_tensor, fps_tensor, bitrate_tensor, resolution_tensor, velocity_tensor)
@@ -74,6 +85,11 @@ async def predict(input_data: PredictionInput):
         _, res_preds = torch.max(res_out, dim=1)
         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
         predicted_resolution = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
+
+    end_event.record()
+    torch.cuda.synchronize()  # Wait for all operations to finish
+    inference_time = start_event.elapsed_time(end_event) / 1000.0  # Convert milliseconds to seconds
+    print(f'Inference time: {inference_time:.4f} seconds')
 
     print(f'"predicted_fps": {predicted_fps.item()}, "predicted_resolution": {predicted_resolution.item()}')
     # pytorch tensor is not JSON serializable, so use

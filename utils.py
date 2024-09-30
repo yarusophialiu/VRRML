@@ -472,3 +472,12 @@ def show_patches(images, num_patches=25):
 
     plt.tight_layout()
     plt.show()
+
+
+
+def count_model_parameters(model):
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    print(f"Total number of parameters: {total_params}")
+    print(f"Number of trainable parameters: {trainable_params}")
