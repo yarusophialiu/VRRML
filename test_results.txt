@@ -1,0 +1,44 @@
+test result 
+patch128_batch128
+test_size 35756, patch_size (128, 128), batch_size 256
+ {'val_loss': tensor(1.2387, device='cuda:0'), 'res_acc': tensor(0.9023), 'fps_acc': tensor(0.6895), 'both_acc': tensor(0.6426), 'jod_loss': 0.024}
+
+
+model_path models/patch256_batch64.pth
+test result 
+ {'val_loss': tensor(1.3328, device='cuda:0'), 'res_acc': tensor(0.8789), 'fps_acc': tensor(0.6719), 'both_acc': tensor(0.5977), 'jod_loss': 0.024}
+
+model_path models/patch128_batch256.pth
+test result 
+ {'val_loss': tensor(1.3861, device='cuda:0'), 'res_acc': tensor(0.8750), 'fps_acc': tensor(0.6543), 'both_acc': tensor(0.5820), 'jod_loss': 0.036}
+
+
+
+
+
+new test results
+model_path models/patch128_batch128.pth
+test result
+ {'val_loss': tensor(1.5049, device='cuda:0'), 'res_acc': tensor(0.8691), 'fps_acc': tensor(0.6484), 'both_acc': tensor(0.5801), 'jod_loss': 0.025}
+
+model_path models/patch128_batch256.pth
+test result 
+ {'val_loss': tensor(1.3842, device='cuda:0'), 'res_acc': tensor(0.8574), 'fps_acc': tensor(0.6367), 'both_acc': tensor(0.5508), 'jod_loss': 0.037}
+
+model_path models/old/patch128_batch128.pth
+test result 
+ {'val_loss': tensor(1.7156, device='cuda:0'), 'res_acc': tensor(0.8770), 'fps_acc': tensor(0.5996), 'both_acc': tensor(0.5410), 'jod_loss': 0.031}
+
+model_path models/old/patch128_batch256.pth
+test result 
+ {'val_loss': tensor(1.4377, device='cuda:0'), 'res_acc': tensor(0.8633), 'fps_acc': tensor(0.6094), 'both_acc': tensor(0.5391), 'jod_loss': 0.036}
+
+
+ unseen scenes
+ model_path models/patch128_batch128.pth
+test result 
+ {'val_loss': tensor(7.9553, device='cuda:0'), 'res_acc': tensor(0.6797), 'fps_acc': tensor(0.4512), 'both_acc': tensor(0.3652), 'jod_loss': 0.114}
+
+ model_path models/patch128_batch256.pth
+test result 
+ {'val_loss': tensor(5.1695, device='cuda:0'), 'res_acc': tensor(0.6660), 'fps_acc': tensor(0.4629), 'both_acc': tensor(0.3730), 'jod_loss': 0.123}
