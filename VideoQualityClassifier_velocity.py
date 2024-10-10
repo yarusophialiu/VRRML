@@ -190,29 +190,26 @@ if __name__ == "__main__":
     SAVE_MODEL_HALF_WAY = False
     START_TRAINING= False # True False
     TEST_EVAL = True
-    PLOT_TEST_RESULT = False
-    SAVE_PLOT = True
-    TEST_SINGLE_IMG = False
     TEST_UNSEEN_SCENE = False # True
     
     model_pth_path = ""
-    folder = 'ML/reference128x128' # TODO change model size reference128x128
+    folder = 'ML_smaller/reference128x128' # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
         data_test_directory = f'{VRRML}/ML/test_scenes128x128' 
     else:
-        data_test_directory = f'{VRRML}/{folder}/test'
+        data_test_directory = f'{VRRML}/{folder}/test_demo'
     data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
     data_val_directory = f'{VRRML}/{folder}/validation'  
 
     if TEST_EVAL:
-        model_pth_path = f'models/patch128_batch128.pth' # patch128_batch128 patch256_batch64
+        model_pth_path = f'models/patch128-256/patch128_batch128.pth' # patch128_batch128 patch256_batch64
 
     num_epochs = 16
     lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 8 # TODO
+    batch_size = 16 # TODO
     patch_size = (128, 128) # TODO, change patch structure in DecRefClassification.py
 
     num_framerates, num_resolutions = 10, 5
@@ -298,8 +295,10 @@ if __name__ == "__main__":
 
         predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
         target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
-        # print(f'predicted_res {predicted_res}')
-        # print(f'target_res {target_res}')
+        print(f'predicted_fps {predicted_fps}')
+        print(f'predicted_res {predicted_res}\n')
+        print(f'target_fps {target_fps}')
+        print(f'target_res {target_res}')
 
         absolute_errors_fps = torch.abs(predicted_fps - target_fps)
         absolute_errors_res = torch.abs(predicted_res - target_res)
