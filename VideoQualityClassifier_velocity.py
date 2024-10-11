@@ -66,7 +66,9 @@ def evaluate(model, val_loader):
 def evaluate_test_data(model, test_loader):
     model.eval()
     with torch.no_grad():  # Ensure gradients are not computed
+        result = {'test_losses': [], 'res_acc': [], 'fps_acc': [], 'both_acc': [], 'jod_loss': []}
         for batch in test_loader:
+            print(f'======================================== batch ========================================')
             images = batch["image"]
             fps = batch["fps"]
             bitrate = batch["bitrate"]
@@ -91,6 +93,12 @@ def evaluate_test_data(model, test_loader):
             # result = {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
             #     'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)} 
             # print(f'result {result}')
+            result['test_losses'].append(total_loss)
+            result['fps_acc'].append(framerate_accuracy)
+            result['res_acc'].append(resolution_accuracy)
+            result['both_acc'].append(both_correct_accuracy)
+            result['jod_loss'].append(jod_loss)
+
             fps = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
             resolution = [360, 480, 720, 864, 1080]
 
@@ -104,9 +112,20 @@ def evaluate_test_data(model, test_loader):
             res_values = torch.tensor(res_values)
             fps_values = torch.tensor(fps_values)
 
-            return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
-                    'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)}, res_out, fps_out, res_targets, fps_targets, \
-                        res_values, fps_values, unique_indices
+            # return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
+            #         'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)}, res_out, fps_out, res_targets, fps_targets, \
+            #             res_values, fps_values, unique_indices
+                # print(f'result {result}')
+        epoch_test_losses = torch.stack(result['test_losses']).mean() # Combine accuracies
+        epoch_res_acc = torch.stack(result['res_acc']).mean() # Combine accuracies
+        epoch_fps_acc = torch.stack(result['fps_acc']).mean()
+        epoch_both_acc = torch.stack(result['both_acc']).mean()
+        epoch_jod_loss = sum(result['jod_loss']) / len(result['jod_loss'])
+        # print(f'batch_jod_loss {batch_jod_loss}')
+        return {'test_losses': epoch_test_losses.item(), 'res_acc': epoch_res_acc.item(), \
+                'fps_acc': epoch_fps_acc.item(), 'both_acc': epoch_both_acc.item(), 'jod_loss': epoch_jod_loss}, \
+                res_out, fps_out, res_targets, fps_targets, \
+                res_values, fps_values, unique_indices
 
 
 def fit(epochs, model, train_loader, val_loader, optimizer, \
@@ -193,12 +212,12 @@ if __name__ == "__main__":
     TEST_UNSEEN_SCENE = False # True
     
     model_pth_path = ""
-    folder = 'ML_smaller/reference128x128' # TODO change model size reference128x128
+    folder = 'ML/reference128x128' # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
         data_test_directory = f'{VRRML}/ML/test_scenes128x128' 
     else:
-        data_test_directory = f'{VRRML}/{folder}/test_demo'
+        data_test_directory = f'{VRRML}/{folder}/test'
     data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
     data_val_directory = f'{VRRML}/{folder}/validation'  
 
@@ -219,14 +238,14 @@ if __name__ == "__main__":
 
     dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
     val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
-    print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
-    print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
-    print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
-    sample = val_dataset[0]
-    print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-    print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
-    print(f'sample path is {sample["path"]}') if VELOCITY else None
-    print(f'learning rate {lr}, batch_size {batch_size}')
+    # print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
+    # print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
+    # print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
+    # sample = val_dataset[0]
+    # print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
+    # print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
+    # print(f'sample path is {sample["path"]}') if VELOCITY else None
+    # print(f'learning rate {lr}, batch_size {batch_size}')
 
     device = get_default_device()
     cuda  = device.type == 'cuda'
