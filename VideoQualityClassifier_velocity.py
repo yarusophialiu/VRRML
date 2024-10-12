@@ -290,7 +290,7 @@ if __name__ == "__main__":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # model.to(device)
         # test_dl = DataLoader(test_dataset, len(test_dataset))
-        test_dl = DataLoader(test_dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
+        test_dl = DataLoader(test_dataset, len(test_dataset), shuffle = True, num_workers = 4, pin_memory = True)
 
         if device.type == 'cuda':
             print(f'Loading data to cuda...')
