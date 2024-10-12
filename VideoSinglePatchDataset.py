@@ -23,8 +23,8 @@ class VideoSinglePatchDataset(Dataset):
         self.samples = []  # To store tuples of (image path, label)
         labels = os.listdir(directory)
 
-        self.fps_targets = [int(label.split('x')[0]) for label in labels]
-        self.res_targets = [int(label.split('x')[1]) for label in labels]
+        self.fps_targets = [int(label.split('x')[1]) for label in labels]
+        self.res_targets = [int(label.split('x')[0]) for label in labels]
 
         self.min_fps = 30
         self.max_fps = 120
