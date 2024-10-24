@@ -16,7 +16,7 @@ std_velocity = 3676701.584
 
 # dataset: handling batching, shuffling, and iterations over the dataset during training or inference
 class VideoSinglePatchDataset(Dataset):
-    def __init__(self, directory, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, VALIDATION=False):
+    def __init__(self, directory, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, VALIDATION=False, FRAMENUMBER=False):
         self.root_directory = directory
         self.patch_size = patch_size
         self.velocity = VELOCITY
@@ -34,6 +34,7 @@ class VideoSinglePatchDataset(Dataset):
         self.min_bitrate = min_bitrate
         self.max_bitrate = max_bitrate
         self.validation = VALIDATION
+        self.framenumber = FRAMENUMBER
 
         # print(f'TYPE {TYPE}')
         # print(f'self.min_bitrate, self.max_bitrate {self.min_bitrate, self.max_bitrate}')
@@ -83,6 +84,9 @@ class VideoSinglePatchDataset(Dataset):
         else:
             bitrate = int(parts[3])  
             velocity = int(parts[-1].split('.')[0]) / 1000  # Remove .png and convert to integer
+        
+        if self.framenumber:
+            framenumber = int(parts[4])
 
 
         fps = self.normalize(fps, self.min_fps, self.max_fps)
@@ -94,6 +98,7 @@ class VideoSinglePatchDataset(Dataset):
         # TODO: normalize velocity
         velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
         # print(f'velocity {velocity}\n')
+        framenumber = self.normalize(framenumber, 0, 276) if self.framenumber else -1
 
 
         image = Image.open(img_path)
@@ -101,12 +106,21 @@ class VideoSinglePatchDataset(Dataset):
             image = self.transform(image)
             # print(f'image.size {image.size()}')
             # image.show()
+         
         sample = {"image": image, "fps": fps, "bitrate": bitrate, "resolution": pixel, \
-                  "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], 'velocity': velocity}
+                  "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], \
+                  'velocity': velocity, 'framenumber': framenumber}
         
-        # print(f'self.velocity {self.velocity}')
+        # # print(f'self.velocity {self.velocity}')
+        # if self.framenumber and self.validation:
+        #     path = '_'.join(parts[5:-1])
+        #     framenumber = parts[4] # 0b0d34e8_166_1080_500_183_bistro_path1_seg1_1_183.png
+        #     sample['path'] = path
+        #     sample['framenumber'] = framenumber
+        #     return sample
+        # elif 
         if self.validation:
-            path = '_'.join(parts[4:-1])
+            path = '_'.join(parts[4:-1]) if not self.framenumber else '_'.join(parts[5:-1])
             # print(f'path {path}')
             sample['path'] = path
             # print(f'velocity {velocity}')
@@ -114,7 +128,3 @@ class VideoSinglePatchDataset(Dataset):
         else:
             return sample
         
-        # if self.validation:
-
-
-
