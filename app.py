@@ -60,6 +60,8 @@ async def predict(input_data: PredictionInput):
     predicted_fps = reverse_fps_map[fps_preds[0]]
     print(f'res_preds {res_preds}, predicted_resolution {predicted_resolution} p')
     print(f'fps_preds {fps_preds}, predicted_fps {predicted_fps} fps')
+    return {"predicted_fps": predicted_fps.item(), "predicted_resolution": predicted_resolution.item()}
+
 
 
 # run the app:
