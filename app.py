@@ -18,7 +18,7 @@ SMALL_MODEL = False
 
 num_framerates, num_resolutions = 10, 5
 model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=True) # 68,778,031 parameters， 68,777,999
-onnx_model_path_float32 = "onnx_models/smaller_vrr_fp32.onnx" # onnx_models vrr_float32_loaded smaller_vrr_fp16
+onnx_model_path_float32 = "onnx_models/vrr_fp32.onnx" # onnx_models vrr_float32_loaded smaller_vrr_fp16
 onnx_smaller_model_path_float32 = "onnx_models/smaller_vrr_fp32.onnx" # onnx_models vrr_float32_loaded smaller_vrr_fp16
 onnx_model_path = onnx_smaller_model_path_float32 if SMALL_MODEL else onnx_model_path_float32
 print(f'onnx_model_path {onnx_model_path}')
