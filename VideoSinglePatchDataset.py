@@ -1,6 +1,7 @@
 
 import os 
 import torch
+from torchvision.transforms.functional import to_pil_image
 from torch.utils.data import random_split
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset
@@ -90,22 +91,24 @@ class VideoSinglePatchDataset(Dataset):
 
 
         fps = self.normalize(fps, self.min_fps, self.max_fps)
-        # print(f'fps {fps}\n')
         pixel = self.normalize(pixel, self.min_res, self.max_res)
-        # print(f'pixel {pixel}\n')
         bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
-        # print(f'bitrate {bitrate}\n')
         # TODO: normalize velocity
         velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
-        # print(f'velocity {velocity}\n')
         framenumber = self.normalize(framenumber, 0, 276) if self.framenumber else -1
 
 
         image = Image.open(img_path)
+        # print(f'\n\n\nimage.mode ', image.mode)
+        image = image.convert('RGBA')
+        # print(f'\n\n\nimage.mode ', image.mode)
+
         if self.transform:
             image = self.transform(image)
             # print(f'image.size {image.size()}')
-            # image.show()
+            # print(f'image {image}')
+            pil_image = to_pil_image(image)
+            pil_image.show()
          
         sample = {"image": image, "fps": fps, "bitrate": bitrate, "resolution": pixel, \
                   "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], \
