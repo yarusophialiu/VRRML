@@ -10,6 +10,9 @@ from torch.utils.data import random_split
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset
 
+from torchvision.transforms.functional import to_pil_image
+from PIL import Image
+
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,12 +37,30 @@ class ImageClassificationBase(nn.Module):
 
         res_targets = batch["res_targets"]
         fps_targets = batch["fps_targets"]
+        
+        # print(f'images {images.size()} {images.dtype}')
+
+        # image = images[0]  # Shape [4, 128, 128]
+        # pil_image = to_pil_image(image)
+        # pil_image.show()
+
+        # rgb_images = images[:, :3, :, :] 
+        # image = rgb_images[0]  # Shape [3, Height, Width]
+        # pil_image2 = to_pil_image(image)
+        # pil_image2.show()
+
+        # print(f'fps {fps.dtype}') # fps, resolution, bitrate, velocity float64
+        # print(f'resolution {resolution.dtype}')
+        # print(f'fps_target {fps_targets.dtype}')
+        # print(f'resolution_target {res_targets.dtype}') # fps resolution targets int64
+        # print(f'image_bitrate {bitrate.dtype}')
+        # print(f'velocity {velocity.dtype}')
         # print(f'\n\n\n training step')
         
         if VELOCITY:
-            res_out, fps_out = self(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
+            res_out, fps_out = self(images[:, :3, :, :], fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
         else:
-            res_out, fps_out = self(images, fps, bitrate, resolution)
+            res_out, fps_out = self(images[:, :3, :, :], fps, bitrate, resolution)
 
         # print(f'res_out {res_out.size()} \n {res_out}')
         # print(f'res_targets {res_targets.size()} \n {res_targets}')
@@ -60,15 +81,12 @@ class ImageClassificationBase(nn.Module):
         resolution = batch["resolution"]
         velocity = batch["velocity"]
 
-        # TODO: convert labels into res_targets, fps_targets 
         res_targets = batch["res_targets"]
         fps_targets = batch["fps_targets"]
         path = batch["path"]
-        res_out, fps_out = self(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
+        res_out, fps_out = self(images[:, :3, :, :], fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
         # print(f'training_step out {out.size()} \n {out.squeeze()}')
-        # print(f'res_targets {res_targets}')
-        # loss_fn_res = nn.CrossEntropyLoss()
-        # loss_fn_fps = nn.CrossEntropyLoss()
+        print(f'path {path}')
     
         total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
         framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_loss = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
