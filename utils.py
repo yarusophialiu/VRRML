@@ -1,4 +1,5 @@
 import os 
+import csv
 import math
 import torch
 import torchvision
@@ -20,20 +21,22 @@ from JOD import *
 
 
 
-# local pc
-CVVDPDIR = 'C:/Users/15142/Projects/ColorVideoVDP'
-VRRMP4_CVVDP = r'C:\Users\15142\Projects\VRR\VRRMP4_CVVDP'
-VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
-VRR_Patches = f'{VRRDATA}/VRR_Patches'
-VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
-VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
-VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
-VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
+# # local pc
+# CVVDPDIR = 'C:/Users/15142/Projects/ColorVideoVDP'
+# VRRMP4_CVVDP = r'C:\Users\15142\Projects\VRR\VRRMP4_CVVDP'
+# VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
+# VRR_Patches = f'{VRRDATA}/VRR_Patches'
+# VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
+# VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
+# VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
+# VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
 
 # # iron
 # VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
 
-
+# windows titanium
+VRRML = r'D:\VRR_data\VRRML'
+VRRML_Project = r'D:\VRRML\VRRML'
 
 scene_arr = ['bedroom', 'bistro', 
              'crytek_sponza', 'gallery', 
@@ -74,6 +77,13 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+def get_velocities_from_patch_data(folder):
+    velocities = []
+    with open(folder, mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            velocities.append(float(row[0]))
+    return velocities
 
 def count_files_in_folder(folder_path):
     return len([f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))])
@@ -176,7 +186,9 @@ def to_device(data, device):
     "Move data to the device"
     if isinstance(data,(list,tuple)):
         return [to_device(x,device) if not isinstance(x, str) else x for x in data]
-    return data.to(device,non_blocking = True)
+    # non_blocking speeds up data transfers to the GPU by allowing asynchronous data movement
+    # print(f'data {type(data)} {data}')
+    return data.to(device, non_blocking = True)
 
 
 def r2_score(target, prediction):
@@ -233,10 +245,15 @@ def zscore_normalization_reverse(sample, data):
 def compute_weighted_loss(res_out, fps_out, res_targets, fps_targets):
     loss_fn_res = nn.CrossEntropyLoss() # CrossEntropyLoss internally apply softmax to logits and calculates the loss
     loss_fn_fps = nn.CrossEntropyLoss()
-    loss_res = loss_fn_res(res_out, res_targets)
-    loss_fps = loss_fn_fps(fps_out, fps_targets)
-
+    # print(f'res_targets {res_targets.long().dtype}')
+    # print(f'res_out {res_out}， res_targets {res_targets}')
+    # print(f'fps_targets {fps_targets.dtype}')
+    loss_res = loss_fn_res(res_out, res_targets) # .type(torch.LongTensor).to(torch.device('cuda')))
+    loss_fps = loss_fn_fps(fps_out, fps_targets) # .type(torch.LongTensor).to(torch.device('cuda')))
     total_loss = loss_res + loss_fps
+    total_loss = loss_res + loss_fps
+    # print(f'total_loss {total_loss}\n')
+
     return total_loss
 
 

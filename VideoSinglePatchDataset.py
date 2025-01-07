@@ -100,15 +100,15 @@ class VideoSinglePatchDataset(Dataset):
 
         image = Image.open(img_path)
         # print(f'\n\n\nimage.mode ', image.mode)
-        image = image.convert('RGBA')
+        # image = image.convert('RGBA') # convert from 3 to 4 chanel
         # print(f'\n\n\nimage.mode ', image.mode)
 
         if self.transform:
             image = self.transform(image)
             # print(f'image.size {image.size()}')
             # print(f'image {image}')
-            pil_image = to_pil_image(image)
-            pil_image.show()
+            # pil_image = to_pil_image(image)
+            # pil_image.show()
          
         sample = {"image": image, "fps": fps, "bitrate": bitrate, "resolution": pixel, \
                   "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], \
