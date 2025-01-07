@@ -16,38 +16,16 @@ import torch.nn.functional as F
 from PIL import Image
 from datetime import datetime
 
-from VideoSinglePatchDataset_test import VideoSinglePatchDataset
+# from VideoSinglePatchDataset_test import VideoSinglePatchDataset_test
+from VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
-from DecRefClassification_test import *
+from DecRefClassification import *
 from torch.utils.tensorboard import SummaryWriter
 
 
 # regressin, learn the curves
 # https://docs.google.com/presentation/d/16yqaaq5zDZ5-S4394VLBUfxpNjM7nlpssqcShFkklec/edit#slide=id.g2c751bc0d9c_0_18
-
-
-
-def display_img(img,label):
-    print(f"Label : {dataset.classes[label]}")
-    plt.imshow(img.permute(1,2,0))
-    plt.show()
-
-def show_batch(dl):
-    """Plot images grid of single batch"""
-    for batch in dl: # dl calls __getitem__
-        images = batch["image"]
-        print(f'images {images.dtype}')
-        labels = batch["label"]
-        print(f'Labels: {labels}')
-        fig,ax = plt.subplots(figsize = (16,12))
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.imshow(make_grid(images,nrow=16).permute(1,2,0))
-        plt.show()
-        break
-
-
 
 
 def accuracy(outputs, labels):
@@ -63,10 +41,13 @@ def evaluate(model, val_loader):
     return model.validation_epoch_end(outputs) # get loss dictionary
 
 
+# from videoqualityclassifier_velocity.py
 def evaluate_test_data(model, test_loader):
     model.eval()
     with torch.no_grad():  # Ensure gradients are not computed
+        result = {'test_losses': [], 'res_acc': [], 'fps_acc': [], 'both_acc': [], 'jod_loss': []}
         for batch in test_loader:
+            # print(f'======================================== batch ========================================')
             images = batch["image"]
             fps = batch["fps"]
             bitrate = batch["bitrate"]
@@ -91,6 +72,12 @@ def evaluate_test_data(model, test_loader):
             # result = {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
             #     'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)} 
             # print(f'result {result}')
+            result['test_losses'].append(total_loss)
+            result['fps_acc'].append(framerate_accuracy)
+            result['res_acc'].append(resolution_accuracy)
+            result['both_acc'].append(both_correct_accuracy)
+            result['jod_loss'].append(jod_loss)
+
             fps = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
             resolution = [360, 480, 720, 864, 1080]
 
@@ -104,83 +91,21 @@ def evaluate_test_data(model, test_loader):
             res_values = torch.tensor(res_values)
             fps_values = torch.tensor(fps_values)
 
-            return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
-                    'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)}, res_out, fps_out, res_targets, fps_targets, \
-                        res_values, fps_values, unique_indices
+            # return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
+            #         'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)}, res_out, fps_out, res_targets, fps_targets, \
+            #             res_values, fps_values, unique_indices
+                # print(f'result {result}')
+        epoch_test_losses = torch.stack(result['test_losses']).mean() # Combine accuracies
+        epoch_res_acc = torch.stack(result['res_acc']).mean() # Combine accuracies
+        epoch_fps_acc = torch.stack(result['fps_acc']).mean()
+        epoch_both_acc = torch.stack(result['both_acc']).mean()
+        epoch_jod_loss = sum(result['jod_loss']) / len(result['jod_loss'])
+        # print(f'batch_jod_loss {batch_jod_loss}')
+        return {'test_losses': epoch_test_losses.item(), 'res_acc': epoch_res_acc.item(), \
+                'fps_acc': epoch_fps_acc.item(), 'both_acc': epoch_both_acc.item(), 'jod_loss': epoch_jod_loss}, \
+                res_out, fps_out, res_targets, fps_targets, \
+                res_values, fps_values, unique_indices
 
-
-def fit(epochs, model, train_loader, val_loader, optimizer, \
-                SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=False, CHECKPOINT=False):
-    print(f'fit VELOCITY {VELOCITY}')
-    history = []
-    # optimizer = opt_func(model.parameters(),lr)
-    model_path = ""
-    if SAVE_MODEL or SAVE_HALFWAY:
-        now = datetime.now()
-        dir_pth = now.strftime("%Y-%m-%d")
-        os.makedirs(dir_pth, exist_ok=True)
-        hrmin = now.strftime("%H_%M")
-        model_path = os.path.join(dir_pth, hrmin)
-
-    # an epoch is one pass through the entire dataset
-    for epoch in epochs:
-        print(f'================================ epoch {epoch} ================================')
-        model.train()
-        train_losses = []
-        count = 0
-        running_loss = 0.0
-        # for each batch, compute gradients for every data
-        # after the batch finishes, evaluate
-        # requests an iterator from DeviceDataLoader, i.e. __iter__ function
-
-        # are batch1 and batch2 not overlap? NO when you use DataLoader with shuffle=True, 
-        # batches will not overlap during training
-        # do all batches cover the whole dataset?
-        for batch in train_loader: # batch is a dictionary with 32 images information, e.g. 'fps': [70, 80, ..., 150]
-            # print(f'batch {batch[fps]}')
-            # print(f'=============== batch {count} ===============') # train_size / batch_size
-            count += 1
-            # images= batch['image']
-            # print(f"Input batch shape: {images.size()}")
-            # get accuracy
-            loss = model.training_step(batch, VELOCITY=VELOCITY) # model
-            train_losses.append(loss)
-            running_loss += loss.item()
-
-            # computes the gradient of the loss with respect to the model parameters
-            # part of the backpropagation algorithm, which is how the neural network learns
-            loss.backward()  
-            optimizer.step() # update the model parameters based on the gradients calculated
-            optimizer.zero_grad() # clears the old gradients, so they don't accumulate
-
-        # avg_train_loss = running_loss / len(train_loader) # len(train_loader) is number of batches
-        result = evaluate(model, val_loader) # val_loss val_res_acc val_fps_acc val_both_acc
-        # Log training and validation metrics to TensorBoard
-        # writer.add_scalar('Loss/train', avg_train_loss, epoch)
-        writer.add_scalar('Loss/validation', result['val_loss'], epoch)
-        writer.add_scalar('Accuracy/val_res_acc', result['val_res_acc'], epoch)
-        writer.add_scalar('Accuracy/val_fps_acc', result['val_fps_acc'], epoch)
-        writer.add_scalar('Accuracy/val_both_acc', result['val_both_acc'], epoch)
-        writer.add_scalar('Loss/jod_loss', result['jod_loss'], epoch)
-
-        # print(f'result \n {result}')
-        result['train_loss'] = torch.stack(train_losses).mean().item()
-        writer.add_scalar('Loss/train', result['train_loss'], epoch)
-        # print(f'len(val_loader) {len(val_loader)}, avg_train_loss {avg_train_loss} {torch.stack(train_losses).mean().item()}')
-
-        model.epoch_end(epoch, result)
-        history.append(result)
-
-        if SAVE_HALFWAY and epoch % 5 == 0 and epoch > 0:
-            os.makedirs(model_path, exist_ok=True)
-            print(f"Epoch {epoch} is a multiple of 10.")
-            save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
-        
-    if SAVE_MODEL:
-        os.makedirs(model_path, exist_ok=True)
-        torch.save(model.state_dict(), f'{model_path}/classification.pth')
-    print(f'model_path {model_path}')
-    return history
 
 # OLD from the last VRRML on desktop
 # disable each parameter and test model performance 
@@ -202,14 +127,14 @@ if __name__ == "__main__":
     data_val_directory = f'{VRRML}/{folder}/validation'  
 
     if TEST_EVAL:
-        model_pth_path = f'models/test_no_param/p128_b128_nores.pth' # patch128_batch128 patch256_batch64
+        model_pth_path = f'2025-01-05/22_47/classification.pth' # patch128_batch128 patch256_batch64
 
-    num_epochs = 13
+    num_epochs = 16
     lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
     batch_size = 128 # TODO
-    patch_size = (128, 128) # TODO, change patch structure in DecRefClassification.py
+    patch_size = (128, 128) # TODO, change patch structure in DecRefClassification_test.py
 
     num_framerates, num_resolutions = 10, 5
     VELOCITY = True
@@ -230,37 +155,6 @@ if __name__ == "__main__":
     device = get_default_device()
     cuda  = device.type == 'cuda'
 
-    if START_TRAINING:
-        model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-        optimizer = opt_func(model.parameters(),lr)
-        epochs = range(num_epochs)
-        if CHECKPOINT:
-            checkpoint = torch.load('2024-09-26/15_19/checkpoint10.pth')
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            # epoch = checkpoint['epoch']
-            epoch = 10
-            epochs = range(epoch+1, num_epochs)
-            for state in optimizer.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.to(device)
-        print(f'epochs {epochs}')
-        train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
-        val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
-        if device.type == 'cuda':
-            print(f'Loading data to cuda...')
-            train_dl = DeviceDataLoader(train_dl, device)
-            val_dl = DeviceDataLoader(val_dl, device)
-            to_device(model, device)
-
-        writer = SummaryWriter('runs/test_param')
-        # fitting the model on training data and record the result after each epoch
-        history = fit(epochs, model, train_dl, val_dl, optimizer, SAVE_MODEL=SAVE_MODEL, \
-                        SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY, CHECKPOINT=CHECKPOINT)
-        writer.close()
-
-
     if TEST_EVAL: # test data size 35756
         test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
         print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
@@ -280,7 +174,7 @@ if __name__ == "__main__":
         print(f'model_path {model_pth_path}')
         result, res_out, fps_out, res_targets, fps_targets, \
                         res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
-        
+
         # get mean absolute error and mean absolute percentage error
         _, fps_preds = torch.max(fps_out, dim=1)
         _, res_preds = torch.max(res_out, dim=1)
@@ -323,4 +217,32 @@ if __name__ == "__main__":
 
         print(f'test result \n {result}\n')
 
-     
+    # if START_TRAINING:
+    #     model = DecRefClassification_test(num_framerates, num_resolutions, VELOCITY=VELOCITY)
+    #     optimizer = opt_func(model.parameters(),lr)
+    #     epochs = range(num_epochs)
+    #     if CHECKPOINT:
+    #         checkpoint = torch.load('2024-09-26/15_19/checkpoint10.pth')
+    #         model.load_state_dict(checkpoint['model_state_dict'])
+    #         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    #         # epoch = checkpoint['epoch']
+    #         epoch = 10
+    #         epochs = range(epoch+1, num_epochs)
+    #         for state in optimizer.state.values():
+    #             for k, v in state.items():
+    #                 if isinstance(v, torch.Tensor):
+    #                     state[k] = v.to(device)
+    #     print(f'epochs {epochs}')
+    #     train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
+    #     val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
+    #     if device.type == 'cuda':
+    #         print(f'Loading data to cuda...')
+    #         train_dl = DeviceDataLoader(train_dl, device)
+    #         val_dl = DeviceDataLoader(val_dl, device)
+    #         to_device(model, device)
+
+    #     writer = SummaryWriter('runs/test_param')
+    #     # fitting the model on training data and record the result after each epoch
+    #     history = fit(epochs, model, train_dl, val_dl, optimizer, SAVE_MODEL=SAVE_MODEL, \
+    #                     SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY, CHECKPOINT=CHECKPOINT)
+    #     writer.close()
