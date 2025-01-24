@@ -18,24 +18,68 @@ from utils import *
 class DeviceDataLoader():
     """ Wrap a dataloader to move data to a device """
     
-    def __init__(self, dl, device):
+    def __init__(self, dl, device, FLOAT16=False):
         self.dl = dl
         self.device = device
+        self.float16 = FLOAT16
     
     def __iter__(self): # called once for every batch
         """ Yield a batch of data after moving it to device"""
         # b is a dictionary with all infos of 32 images
-        # print(f'self.dl \n {self.dl}')
-        for b in self.dl: # a list of 3 dictionary or 1 dictionary with 5 entries
+        # {"image":..., "fps": [1.5110, dtype=torch.float64)], ...}
+        try:
+            for b in self.dl:
+                if isinstance(b, dict):
+                    # print(f'dictionary')
+                    # batch = {k: to_device(v, self.device) for k, v in b.items()}
+                    if self.float16:
+                        batch = {k: to_device(v, self.device).half() if not isinstance(v, (str, list)) else v for k, v in b.items()}
+                        if len(b) == 9:
+                            print(f'b path {b["path"]}')
+                    # elif self.float16 and len(b) == 9: # has path, which is used for computing jod loss in validation
+                    #     for k, v in b.items():
+                    #         batch = {}
+                    #         if k == "path":
+
+                    else:
+                        batch = {k: to_device(v, self.device) if not isinstance(v, str) else v for k, v in b.items()}
+                else:
+                    # print(f'non dictionary')
+                    
+                    if self.float16:
+                        batch = tuple(to_device(v, self.device).half() for v in b)
+                    else:
+                        batch = tuple(to_device(v, self.device) for v in b)
+                yield batch
+            
+        except Exception as e:
+                print(f"Corrupted image Error: {e}")
+        # for b in self.dl:
             # b is the output of getitem in dataset, so b is a tuple of 5 elements
-            # images_tensor, metadata, fps_target, resolution_target, image_bitrate
             # print(f'b {len(b)}')
-            if isinstance(b, dict):
-                # batch = {k: to_device(v, self.device) for k, v in b.items()}
-                batch = {k: to_device(v, self.device) if not isinstance(v, str) else v for k, v in b.items()}
-            else:
-                batch = tuple(to_device(v, self.device) for v in b)
-            yield batch
+            # print(f'b {b}')
+            # if isinstance(b, dict):
+            #     # print(f'dictionary')
+            #     # batch = {k: to_device(v, self.device) for k, v in b.items()}
+            #     if self.float16:
+            #         batch = {k: to_device(v, self.device).half() if not isinstance(v, (str, list)) else v for k, v in b.items()}
+            #         if len(b) == 9:
+            #             print(f'b path {b["path"]}')
+            #     # elif self.float16 and len(b) == 9: # has path, which is used for computing jod loss in validation
+            #     #     for k, v in b.items():
+            #     #         batch = {}
+            #     #         if k == "path":
+
+            #     else:
+            #         batch = {k: to_device(v, self.device) if not isinstance(v, str) else v for k, v in b.items()}
+            # else:
+            #     # print(f'non dictionary')
+                
+            #     if self.float16:
+            #         batch = tuple(to_device(v, self.device).half() for v in b)
+            #     else:
+            #         batch = tuple(to_device(v, self.device) for v in b)
+            # yield batch
             
     def __len__(self):
         """ Number of batches """
