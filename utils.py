@@ -18,6 +18,7 @@ import numpy as np
 # import torch.nn.functional as F
 # from PIL import Image
 from JOD import *
+import onnx
 
 
 
@@ -288,10 +289,78 @@ def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targe
         pred = get_jod_score(corresponding_value, path_name, bitrate_val, fps_preds_val, str(res_preds_val))
         truth = get_jod_score(corresponding_value, path_name, bitrate_val, fps_targets_val, str(res_targets_val))
         # print(f'pred {pred}, truth {truth}')
-        return abs(pred - truth)
+        # return (pred - truth) ** 2
+        return pred, truth
     else:
-        print(f"Variable {variable_name} does not exist")
-        return 0
+        # print(f"Variable {variable_name} does not exist")
+        return 0, 0
+    
+
+
+
+def count_parameters(model_path, model_class=None):
+    """
+    Count the total number of parameters in a PyTorch model.
+    
+    Parameters:
+        pth_model_path (str): Path to the .pth model file.
+        model_class (torch.nn.Module, optional): The class definition of the model
+            (only required if the saved file contains state_dict).
+    
+    Returns:
+        int: Total number of parameters in the model.
+    """
+    # model_class = DecRefClassification(num_framerates=10, num_resolutions=5)
+
+    state_dict = torch.load(model_path)
+    model_class.load_state_dict(state_dict)
+    total_params = sum(p.numel() for p in model_class.parameters())
+    print(f"Total number of parameters in the model: {total_params}")
+    return total_params
+
+def count_parameters_onnx(onnx_model_path):
+    # Load the ONNX model
+    model = onnx.load(onnx_model_path)
+
+    # Initialize parameter count
+    total_params = 0
+
+    # Iterate through the model's initializer (parameters)
+    for initializer in model.graph.initializer:
+        # Get the parameter shape
+        param_shape = tuple(dim for dim in initializer.dims)
+        # Calculate the number of parameters for this tensor
+        num_params = np.prod(param_shape)
+        total_params += num_params
+
+    return total_params
+
+def compute_RMSE(predicted, target):
+    """
+    root mean square error
+    https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+    """
+    predicted = predicted.float()
+    target = target.float()
+    mse = torch.mean((predicted - target) ** 2)  # Mean Squared Error
+    rmse = torch.sqrt(mse)  # Root Mean Squared Error
+    # print(f'mse, rmse {mse}, {rmse}')
+    return round(rmse.item(), 3)
+
+
+def compute_RMSEP(predicted, target):
+    """
+    Root Mean Squared Percentage Error (RMSPE)
+    https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+    """
+    predicted = predicted.float()
+    target = target.float()
+    percentage_error = (predicted - target) / target
+    squared_percentage_error = percentage_error ** 2
+    rmspe = torch.sqrt(torch.mean(squared_percentage_error))
+
+    # print(f"RMSPE: {rmspe.item() * 100:.2f}%")
+    return round(rmspe.item() * 100, 3)
 
     
 def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, paths=None):
@@ -302,15 +371,22 @@ def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, p
         framerate_accuracy = torch.tensor(torch.sum(fps_preds == fps_targets).item() / len(fps_targets))
         resolution_accuracy = torch.tensor(torch.sum(res_preds == res_targets).item() / len(res_targets))
         both_correct_accuracy = torch.tensor(torch.sum((res_preds == res_targets) & (fps_preds == fps_targets)).item() / len(res_targets))
-        jod_loss = 0
+        jod_preds_arr = []
+        jod_targets_arr = []
+        # jod_loss = 0
         # data_size = fps_targets.size()[0]
         data_size = len(fps_targets)
         if paths:
             for i in range(data_size):
-                jod_loss += compute_JOD_loss(paths[i], bitrate[i].item(), fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
-            jod_loss /= data_size
+                # print(f'path {paths[i]}')
+                jod_preds, jod_targets =  compute_JOD_loss(paths[i], bitrate[i].item(), fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
+                jod_preds_arr.append(jod_preds)
+                jod_targets_arr.append(jod_targets)
+            # jod_loss /= data_size
+            # jod_loss_arr.append(jod_loss)
             # print(f'jod_loss {jod_loss} data_size {data_size}')
-        return framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_loss
+        return framerate_accuracy, resolution_accuracy, both_correct_accuracy, torch.tensor(jod_preds_arr), torch.tensor(jod_targets_arr)
+# torch.sqrt(torch.mean(torch.tensor(jod_loss_arr)))
 
 def plot_test_result(test_dl, predictions, epoch="", SAVE_PLOT=False):
     for batch in test_dl:

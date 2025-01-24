@@ -20,10 +20,10 @@ from datetime import datetime
 from VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
-from DecRefClassification import *
+from DecRefClassification_smaller import *
 from torch.utils.tensorboard import SummaryWriter
 
-
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 # regressin, learn the curves
 # https://docs.google.com/presentation/d/16yqaaq5zDZ5-S4394VLBUfxpNjM7nlpssqcShFkklec/edit#slide=id.g2c751bc0d9c_0_18
 
@@ -45,7 +45,14 @@ def evaluate(model, val_loader):
 def evaluate_test_data(model, test_loader):
     model.eval()
     with torch.no_grad():  # Ensure gradients are not computed
-        result = {'test_losses': [], 'res_acc': [], 'fps_acc': [], 'both_acc': [], 'jod_loss': []}
+        result = {'jod_loss': [], 'test_losses': [], 'res_acc': [], 'fps_acc': [], 'both_acc': [],}
+        res_preds_all = None
+        fps_preds_all = None
+        jod_preds_all = None
+        res_targets_all = None
+        fps_targets_all = None
+        jod_targets_all = None
+
         for batch in test_loader:
             # print(f'======================================== batch ========================================')
             images = batch["image"]
@@ -65,10 +72,22 @@ def evaluate_test_data(model, test_loader):
                     unique_indices[value] = index
 
             res_out, fps_out = model(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
+            _, fps_preds = torch.max(fps_out, dim=1)
+            _, res_preds = torch.max(res_out, dim=1)
+            res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
+            fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
+            res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
+            fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+            # print(f'fps_preds {fps_preds}')
+            # print(f'fps_targets {fps_targets}')
+            # res_out, fps_out = model(images, fps, bitrate, velocity)  # NaturalSceneClassification.forward
             # print(f'training_step out {out.size()} \n {out.squeeze()}')
             # print(f'labels out {labels}')
             total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
-            framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_loss = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+            framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+            # print(f'jod_preds {jod_preds}')
+            jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+            jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
             # result = {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
             #     'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)} 
             # print(f'result {result}')
@@ -76,7 +95,7 @@ def evaluate_test_data(model, test_loader):
             result['fps_acc'].append(framerate_accuracy)
             result['res_acc'].append(resolution_accuracy)
             result['both_acc'].append(both_correct_accuracy)
-            result['jod_loss'].append(jod_loss)
+            # result['jod_loss'].append(jod_loss)
 
             fps = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
             resolution = [360, 480, 720, 864, 1080]
@@ -99,42 +118,42 @@ def evaluate_test_data(model, test_loader):
         epoch_res_acc = torch.stack(result['res_acc']).mean() # Combine accuracies
         epoch_fps_acc = torch.stack(result['fps_acc']).mean()
         epoch_both_acc = torch.stack(result['both_acc']).mean()
-        epoch_jod_loss = sum(result['jod_loss']) / len(result['jod_loss'])
+        # epoch_jod_loss = sum(result['jod_loss']) / len(result['jod_loss'])
         # print(f'batch_jod_loss {batch_jod_loss}')
         return {'test_losses': epoch_test_losses.item(), 'res_acc': epoch_res_acc.item(), \
-                'fps_acc': epoch_fps_acc.item(), 'both_acc': epoch_both_acc.item(), 'jod_loss': epoch_jod_loss}, \
-                res_out, fps_out, res_targets, fps_targets, \
-                res_values, fps_values, unique_indices
+                'fps_acc': epoch_fps_acc.item(), 'both_acc': epoch_both_acc.item(),}, \
+                res_preds_all, fps_preds_all, res_targets_all, fps_targets_all, jod_preds_all, jod_targets_all \
+                # res_values, fps_values, unique_indices
 
 
-# OLD from the last VRRML on desktop
 # disable each parameter and test model performance 
+# change model(images, fps, bitrate, velocity) in evaluate_test_data based on the used model
 if __name__ == "__main__":
     SAVE_MODEL = True
     SAVE_MODEL_HALF_WAY = True
     START_TRAINING= False # True False
     TEST_EVAL = True
-    TEST_UNSEEN_SCENE = False # True
+    TEST_UNSEEN_SCENE = True # True False
     
     model_pth_path = ""
-    folder = 'ML/reference128x128' # TODO change model size reference128x128
+    folder = 'ML_smaller/reference128x128' # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
-        data_test_directory = f'{VRRML}/ML/test_scenes128x128' 
+        data_test_directory = f'{VRRML}/ML/test_scenes128x128' # test_64x64 test_scenes64x64 test_scenes128x128
     else:
         data_test_directory = f'{VRRML}/{folder}/test'
     data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
     data_val_directory = f'{VRRML}/{folder}/validation'  
-
+    
     if TEST_EVAL:
-        model_pth_path = f'2025-01-05/22_47/classification.pth' # patch128_batch128 patch256_batch64
+        model_pth_path = f'2025-01-15/smaller_model/classification.pth' # classification150 patch128_batch128 patch256_batch64
 
     num_epochs = 16
     lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
-    batch_size = 128 # TODO
-    patch_size = (128, 128) # TODO, change patch structure in DecRefClassification_test.py
+    batch_size = 128 
+    patch_size = (128, 128) # change patch structure in DecRefClassification_test.py
 
     num_framerates, num_resolutions = 10, 5
     VELOCITY = True
@@ -156,7 +175,13 @@ if __name__ == "__main__":
     cuda  = device.type == 'cuda'
 
     if TEST_EVAL: # test data size 35756
-        test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
+        torch.manual_seed(42)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        # framenumber = True for patch 64x64
+        test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, \
+                                               max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, \
+                                                VALIDATION=VALIDATION, FRAMENUMBER=True) # len 27592
         print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
         # model_pth_path = f'models/patch128_batch256.pth' # patch128_batch128 patch256_batch64
@@ -164,7 +189,7 @@ if __name__ == "__main__":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # model.to(device)
         # test_dl = DataLoader(test_dataset, len(test_dataset))
-        test_dl = DataLoader(test_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
+        test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
 
         if device.type == 'cuda':
             print(f'Loading data to cuda...')
@@ -172,14 +197,10 @@ if __name__ == "__main__":
             to_device(model, device)
 
         print(f'model_path {model_pth_path}')
-        result, res_out, fps_out, res_targets, fps_targets, \
-                        res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
-
-        # get mean absolute error and mean absolute percentage error
-        _, fps_preds = torch.max(fps_out, dim=1)
-        _, res_preds = torch.max(res_out, dim=1)
-        # print(f'res_preds {res_preds}')
-        # print(f'res_targets {res_targets}\n')
+        print(f'TEST_UNSEEN_SCENE {TEST_UNSEEN_SCENE}')
+        # result = evaluate_test_data(model, test_dl)
+        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
+                        # res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
         
         reverse_fps_map = {v: k for k, v in fps_map.items()}
         reverse_res_map = {v: k for k, v in res_map.items()}
@@ -193,28 +214,19 @@ if __name__ == "__main__":
         # print(f'predicted_res {predicted_res}')
         # print(f'target_res {target_res}')
 
-        absolute_errors_fps = torch.abs(predicted_fps - target_fps)
-        absolute_errors_res = torch.abs(predicted_res - target_res)
-        # print(f'absolute_errors_res {absolute_errors_res}\n')
-        expected_error_fps = torch.mean(absolute_errors_fps.float())
-        expected_error_res = torch.mean(absolute_errors_res.float())
-        # print(f"Expected Error vertical resolution (Mean Absolute Error): {expected_error_res.item()}\n")
-        # print(f"Expected Error fps (Mean Absolute Error): {expected_error_fps.item()}")
+    
+        # Root Mean Square Error
+        # https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+        resolution_RMSE = compute_RMSE(predicted_res, target_res)
+        fps_RMSE = compute_RMSE(predicted_fps, target_fps)
+        jod_RMSE = compute_RMSE(jod_preds, jod_targets)
 
-        # Compute the absolute percentage error
-        # print(f'predicted_fps {predicted_fps}')
-        percentage_errors_fps = torch.abs((predicted_fps - target_fps) / target_fps) * 100
-        percentage_errors_res = torch.abs((predicted_res - target_res) / target_res) * 100
-        # print(f"percentage_errors_fps: {percentage_errors_fps}") 
-        # print(f"percentage_errors_res: {percentage_errors_res}\n") 
-
-        # Compute the mean absolute percentage error (MAPE)
-        mape_fps = torch.mean(percentage_errors_fps.float())
-        mape_res = torch.mean(percentage_errors_res.float())
-        print(f"FPS: Mean Absolute Error {expected_error_fps.item()}, Mean Absolute Percentage Error (MAPE): {round(mape_fps.item(), 3)}%")
-        print(f"Resolution: Mean Absolute Error {expected_error_res.item()}, Mean Absolute Percentage Error (MAPE): {round(mape_res.item(), 3)}%\n")
-
-
+        # Root Mean Squared Percentage Error (RMSPE) 
+        resolution_RMSEP = compute_RMSEP(predicted_res, target_res)
+        fps_RMSEP = compute_RMSEP(predicted_fps, target_fps)
+        print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
+        print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
+        print(f'jod rmse {jod_RMSE}')
         print(f'test result \n {result}\n')
 
     # if START_TRAINING:
