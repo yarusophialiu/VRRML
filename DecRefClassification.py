@@ -46,15 +46,19 @@ class DecRefClassification(ImageClassificationBase):
             nn.MaxPool2d(2,2), # output is 16, see official document to compute 
             
             nn.Flatten(),
-            nn.Linear(65536,1024), # output vector of size 1024, 65536 = 256 * 16 * 16 for 128x128, 16384 for 64x64
+            # output vector of size 1024, 65536 = 256 * 16 * 16 for 128x128, 16384 for 64x64, 256 * 32 * 32 for 256x256
+            nn.Linear(256 * 16 * 16, 1024), 
             nn.ReLU(),
             nn.Linear(1024, 512),
             nn.ReLU(),
             nn.Linear(512, 32) # embedding of size 32
         )
 
+        # self.batch_norm = nn.BatchNorm1d(32)  # Initialize BatchNorm
+        # self.sigmoid = nn.Sigmoid()
+
         self.velocity = VELOCITY
-        num_extra_features = 4 if self.velocity else 3
+        num_extra_features = 2 if self.velocity else 3 # 4
         self.fc_network = nn.Sequential(
             nn.Linear(32+num_extra_features, 16),  # fps, bitrate, velocity
             # nn.Linear(32 + 2, 16),  # Adjust input features to match your extended vector size
@@ -68,26 +72,44 @@ class DecRefClassification(ImageClassificationBase):
         self.fc_res = nn.Linear(16, num_resolutions)
         self.fc_fps = nn.Linear(16, num_framerates)
 
-    
     def forward(self, images, fps, bitrate, resolution, velocity): # velocity=0
         """images, fps, image_bitrate, resolution, velocity"""
         # print(f'image {images.size()} ')
         features = self.network(images)    
-        # print(f'========= forward =========')
-        # print(f'features \n {features[0]}')
-        # print(f'fps {fps.size()} {fps}')
 
-        fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float()  # TODO dim=1 Example way to combine fps and bitrate
-        # fps_resolution_bitrate = torch.stack([fps, bitrate, resolution], dim=1).float()  # Example way to combine fps and bitrate
+        # fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float()  # TODO dim=1 Example way to combine fps and bitrate
+        fps_resolution_bitrate = torch.stack([fps, bitrate, velocity], dim=1).float()  # Example way to combine fps and bitrate
         # print(f'fps_resolution_bitrate {fps_resolution_bitrate.size()} {fps_resolution_bitrate}')
 
         combined = torch.cat((features, fps_resolution_bitrate), dim=1)
         # print(f'combined {combined.size()}\n {combined}')               
 
         x = self.fc_network(combined)
+        # x = self.fc_network(fps_resolution_bitrate)
         res_out = self.fc_res(x) 
         fps_out = self.fc_fps(x) 
         # print(f'res_out {res_out.squeeze(1)} \n\n\n')
         return res_out, fps_out
 
     
+    # with batch norm
+    # def forward(self, images, fps, bitrate, resolution, velocity): # velocity=0
+    #     """images, fps, image_bitrate, resolution, velocity"""
+    #     # print(f'images {images.size()} {images.dtype}')
+    #     unnorm_features = self.network(images)    
+    #     normalized_features = self.batch_norm(unnorm_features)
+    #     self.batch_norm.eval()
+    #     normalized_features = self.sigmoid(normalized_features)  # Apply Sigmoid
+
+    #     fps_resolution_bitrate = torch.stack([fps, bitrate, resolution, velocity], dim=1).float() # TODO dim=1 Example way to combine fps and bitrate
+    #     # fps_resolution_bitrate = torch.stack([bitrate, velocity], dim=1).float()  # Example way to combine fps and bitrate
+    #     # print(f'fps_resolution_bitrate {fps_resolution_bitrate.size()} {fps_resolution_bitrate}')
+
+    #     combined = torch.cat((normalized_features, fps_resolution_bitrate), dim=1)
+    #     # print(f'combined {combined.dtype}\n') # float16           
+
+    #     x = self.fc_network(combined)
+    #     res_out = self.fc_res(x) 
+    #     fps_out = self.fc_fps(x) 
+    #     # print(f'res_out {res_out.squeeze(1)} \n\n\n')
+    #     return res_out, fps_out

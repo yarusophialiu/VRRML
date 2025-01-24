@@ -1,14 +1,14 @@
 # from onnx_demo import *
 from DecRefClassification import *
 
-
-
+model_dir = "2025-01-05/22_47"
+model_path = f"{model_dir}/classification.pth"
 model = DecRefClassification(num_framerates=10, num_resolutions=5, VELOCITY=True)
-
+model.load_state_dict(torch.load(model_path)) 
 # Set the model to evaluation mode
 model.eval()
 
-dummy_images = torch.randn(1, 4, 128, 128)        # Example image input of size 128x128
+dummy_images = torch.randn(1, 3, 128, 128)        # Example image input of size 128x128
 dummy_fps = torch.tensor([30])                  # Single FPS value in batch (or size of batch, e.g., [[30], [60]])
 dummy_bitrate = torch.tensor([500])             # Single bitrate value in batch
 dummy_resolution = torch.tensor([720])          # Single resolution value in batch
@@ -17,7 +17,7 @@ dummy_velocity = torch.tensor([1.2])            # Single velocity value in batch
 torch.onnx.export(
     model,
     (dummy_images, dummy_fps, dummy_bitrate, dummy_resolution, dummy_velocity),
-    "vrr_classification_float32_4channel.onnx",
+    f"{model_dir}/vrr_fp32.onnx",
     input_names=["images", "fps", "bitrate", "resolution", "velocity"],
     output_names=["res_out", "fps_out"],
     dynamic_axes={

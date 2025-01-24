@@ -1,4 +1,5 @@
 import os 
+import csv
 import math
 import torch
 import onnx
@@ -18,23 +19,26 @@ import numpy as np
 # import torch.nn.functional as F
 # from PIL import Image
 from JOD import *
+import onnx
 
 
 
-# local pc
-CVVDPDIR = 'C:/Users/15142/Projects/ColorVideoVDP'
-VRRMP4_CVVDP = r'C:\Users\15142\Projects\VRR\VRRMP4_CVVDP'
-VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
-VRR_Patches = f'{VRRDATA}/VRR_Patches'
-VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
-VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
-VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
-VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
+# # local pc
+# CVVDPDIR = 'C:/Users/15142/Projects/ColorVideoVDP'
+# VRRMP4_CVVDP = r'C:\Users\15142\Projects\VRR\VRRMP4_CVVDP'
+# VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
+# VRR_Patches = f'{VRRDATA}/VRR_Patches'
+# VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
+# VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
+# VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
+# VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
 
 # # iron
 # VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
 
-
+# windows titanium
+VRRML = r'D:\VRR_data\VRRML'
+VRRML_Project = r'D:\VRRML\VRRML'
 
 scene_arr = ['bedroom', 'bistro', 
              'crytek_sponza', 'gallery', 
@@ -75,6 +79,13 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+def get_velocities_from_patch_data(folder):
+    velocities = []
+    with open(folder, mode='r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            velocities.append(float(row[0]))
+    return velocities
 
 def count_files_in_folder(folder_path):
     return len([f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))])
@@ -183,7 +194,9 @@ def to_device(data, device):
     "Move data to the device"
     if isinstance(data,(list,tuple)):
         return [to_device(x,device) if not isinstance(x, str) else x for x in data]
-    return data.to(device,non_blocking = True)
+    # non_blocking speeds up data transfers to the GPU by allowing asynchronous data movement
+    # print(f'data {type(data)} {data}')
+    return data.to(device, non_blocking = True)
 
 
 def r2_score(target, prediction):
@@ -254,10 +267,15 @@ def count_parameters_onnx(onnx_model_path):
 def compute_weighted_loss(res_out, fps_out, res_targets, fps_targets):
     loss_fn_res = nn.CrossEntropyLoss() # CrossEntropyLoss internally apply softmax to logits and calculates the loss
     loss_fn_fps = nn.CrossEntropyLoss()
-    loss_res = loss_fn_res(res_out, res_targets)
-    loss_fps = loss_fn_fps(fps_out, fps_targets)
-
+    # print(f'res_targets {res_targets.long().dtype}')
+    # print(f'res_out {res_out}， res_targets {res_targets}')
+    # print(f'fps_targets {fps_targets.dtype}')
+    loss_res = loss_fn_res(res_out, res_targets) # .type(torch.LongTensor).to(torch.device('cuda')))
+    loss_fps = loss_fn_fps(fps_out, fps_targets) # .type(torch.LongTensor).to(torch.device('cuda')))
     total_loss = loss_res + loss_fps
+    total_loss = loss_res + loss_fps
+    # print(f'total_loss {total_loss}\n')
+
     return total_loss
 
 
@@ -293,10 +311,78 @@ def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targe
         pred = get_jod_score(corresponding_value, path_name, bitrate_val, fps_preds_val, str(res_preds_val))
         truth = get_jod_score(corresponding_value, path_name, bitrate_val, fps_targets_val, str(res_targets_val))
         # print(f'pred {pred}, truth {truth}')
-        return abs(pred - truth)
+        # return (pred - truth) ** 2
+        return pred, truth
     else:
-        print(f"Variable {variable_name} does not exist")
-        return 0
+        # print(f"Variable {variable_name} does not exist")
+        return 0, 0
+    
+
+
+
+def count_parameters(model_path, model_class=None):
+    """
+    Count the total number of parameters in a PyTorch model.
+    
+    Parameters:
+        pth_model_path (str): Path to the .pth model file.
+        model_class (torch.nn.Module, optional): The class definition of the model
+            (only required if the saved file contains state_dict).
+    
+    Returns:
+        int: Total number of parameters in the model.
+    """
+    # model_class = DecRefClassification(num_framerates=10, num_resolutions=5)
+
+    state_dict = torch.load(model_path)
+    model_class.load_state_dict(state_dict)
+    total_params = sum(p.numel() for p in model_class.parameters())
+    print(f"Total number of parameters in the model: {total_params}")
+    return total_params
+
+def count_parameters_onnx(onnx_model_path):
+    # Load the ONNX model
+    model = onnx.load(onnx_model_path)
+
+    # Initialize parameter count
+    total_params = 0
+
+    # Iterate through the model's initializer (parameters)
+    for initializer in model.graph.initializer:
+        # Get the parameter shape
+        param_shape = tuple(dim for dim in initializer.dims)
+        # Calculate the number of parameters for this tensor
+        num_params = np.prod(param_shape)
+        total_params += num_params
+
+    return total_params
+
+def compute_RMSE(predicted, target):
+    """
+    root mean square error
+    https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+    """
+    predicted = predicted.float()
+    target = target.float()
+    mse = torch.mean((predicted - target) ** 2)  # Mean Squared Error
+    rmse = torch.sqrt(mse)  # Root Mean Squared Error
+    # print(f'mse, rmse {mse}, {rmse}')
+    return round(rmse.item(), 3)
+
+
+def compute_RMSEP(predicted, target):
+    """
+    Root Mean Squared Percentage Error (RMSPE)
+    https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+    """
+    predicted = predicted.float()
+    target = target.float()
+    percentage_error = (predicted - target) / target
+    squared_percentage_error = percentage_error ** 2
+    rmspe = torch.sqrt(torch.mean(squared_percentage_error))
+
+    # print(f"RMSPE: {rmspe.item() * 100:.2f}%")
+    return round(rmspe.item() * 100, 3)
 
     
 def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, paths=None):
@@ -307,15 +393,22 @@ def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, p
         framerate_accuracy = torch.tensor(torch.sum(fps_preds == fps_targets).item() / len(fps_targets))
         resolution_accuracy = torch.tensor(torch.sum(res_preds == res_targets).item() / len(res_targets))
         both_correct_accuracy = torch.tensor(torch.sum((res_preds == res_targets) & (fps_preds == fps_targets)).item() / len(res_targets))
-        jod_loss = 0
+        jod_preds_arr = []
+        jod_targets_arr = []
+        # jod_loss = 0
         # data_size = fps_targets.size()[0]
         data_size = len(fps_targets)
         if paths:
             for i in range(data_size):
-                jod_loss += compute_JOD_loss(paths[i], bitrate[i].item(), fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
-            jod_loss /= data_size
+                # print(f'path {paths[i]}')
+                jod_preds, jod_targets =  compute_JOD_loss(paths[i], bitrate[i].item(), fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
+                jod_preds_arr.append(jod_preds)
+                jod_targets_arr.append(jod_targets)
+            # jod_loss /= data_size
+            # jod_loss_arr.append(jod_loss)
             # print(f'jod_loss {jod_loss} data_size {data_size}')
-        return framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_loss
+        return framerate_accuracy, resolution_accuracy, both_correct_accuracy, torch.tensor(jod_preds_arr), torch.tensor(jod_targets_arr)
+# torch.sqrt(torch.mean(torch.tensor(jod_loss_arr)))
 
 def plot_test_result(test_dl, predictions, epoch="", SAVE_PLOT=False):
     for batch in test_dl:
