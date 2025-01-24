@@ -1,6 +1,7 @@
 import os 
 import math
 import torch
+import onnx
 import torchvision
 # import seaborn as sns
 import matplotlib.pyplot as plt
@@ -89,6 +90,12 @@ def get_jod_score(all_data, sheet_name, bitrate, fps, resolution):
     # print(type(fps))
     # print(type(resolution))
     return all_data.get(sheet_name, {}).get(bitrate, {}).get(fps, {}).get(resolution, "Not Found")
+
+
+
+def denormalize(normalized_value, min_val=0, max_val=276):
+    original_value = normalized_value * (max_val - min_val) + min_val
+    return original_value
 
 
 def show_patch(patch):
@@ -229,6 +236,20 @@ def zscore_normalization_reverse(sample, data):
     return round(original_sample, 3)
 
 
+def count_parameters_onnx(onnx_model_path):
+    model = onnx.load(onnx_model_path)
+    total_params = 0
+
+    # Iterate through the model's initializer (parameters)
+    for initializer in model.graph.initializer:
+        # Get the parameter shape
+        param_shape = tuple(dim for dim in initializer.dims)
+        # Calculate the number of parameters for this tensor
+        num_params = np.prod(param_shape)
+        total_params += num_params
+
+    return total_params
+
 
 def compute_weighted_loss(res_out, fps_out, res_targets, fps_targets):
     loss_fn_res = nn.CrossEntropyLoss() # CrossEntropyLoss internally apply softmax to logits and calculates the loss
@@ -265,9 +286,10 @@ def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targe
         res_targets_val = find_key_by_value(res_map, res_targets)
         bitrate_val = find_key_by_value(bitrate_map, round(bitrate, 3))
 
-        # print(f"{variable_name} fps, res preds {fps_preds_val, res_preds_val}")
+        print(f"corresponding_value {corresponding_value}")
+        print(f"{variable_name} fps, res preds {fps_preds_val, res_preds_val}")
         # print(f"fps, res targets {fps_targets_val, res_targets_val}")
-        # print(f"path_name {path_name}, bitrate_val {bitrate_val}")
+        print(f"path_name {path_name}, bitrate_val {bitrate_val}")
         pred = get_jod_score(corresponding_value, path_name, bitrate_val, fps_preds_val, str(res_preds_val))
         truth = get_jod_score(corresponding_value, path_name, bitrate_val, fps_targets_val, str(res_targets_val))
         # print(f'pred {pred}, truth {truth}')
@@ -437,6 +459,10 @@ def normalize_z_value(column, mean, std_dev):
     # mean = np.mean(data)
     # std_dev = np.std(data)
     return (column - mean) / std_dev
+
+
+def unnormalize_z_value(normalized_column, mean, std_dev):
+    return (normalized_column * std_dev) + mean
 
 
 def normalize_max_min(sample, min_vals, max_vals):
