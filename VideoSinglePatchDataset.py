@@ -124,7 +124,6 @@ class VideoSinglePatchDataset(Dataset):
         # elif 
         if self.validation:
             path = '_'.join(parts[4:-1]) if not self.framenumber else '_'.join(parts[5:-1])
-            # print(f'path {path}')
             sample['path'] = path # path is to compute JOD loss
             # print(f'velocity {velocity}')
             return sample
