@@ -139,14 +139,14 @@ if __name__ == "__main__":
     folder = 'ML_smaller/reference128x128' # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
-        data_test_directory = f'{VRRML}/ML/test_scenes128x128' # test_64x64 test_scenes64x64 test_scenes128x128
+        data_test_directory = f'{VRRML}/ML_smaller/test_scenes128x128' # test_64x64 test_scenes64x64 test_scenes128x128
     else:
         data_test_directory = f'{VRRML}/{folder}/test'
     data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
     data_val_directory = f'{VRRML}/{folder}/validation'  
     
     if TEST_EVAL:
-        model_pth_path = f'2025-01-15/smaller_model/classification.pth' # classification150 patch128_batch128 patch256_batch64
+        model_pth_path = f'models/smaller_model/classification.pth' # classification150 patch128_batch128 patch256_batch64
 
     num_epochs = 16
     lr = 0.0003
@@ -181,14 +181,11 @@ if __name__ == "__main__":
         # framenumber = True for patch 64x64
         test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, \
                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, \
-                                                VALIDATION=VALIDATION, FRAMENUMBER=True) # len 27592
+                                                VALIDATION=VALIDATION, FRAMENUMBER=False) # len 27592
         print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
         model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-        # model_pth_path = f'models/patch128_batch256.pth' # patch128_batch128 patch256_batch64
         model.load_state_dict(torch.load(model_pth_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # model.to(device)
-        # test_dl = DataLoader(test_dataset, len(test_dataset))
         test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
 
         if device.type == 'cuda':
@@ -198,7 +195,6 @@ if __name__ == "__main__":
 
         print(f'model_path {model_pth_path}')
         print(f'TEST_UNSEEN_SCENE {TEST_UNSEEN_SCENE}')
-        # result = evaluate_test_data(model, test_dl)
         result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
                         # res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
         
@@ -214,7 +210,6 @@ if __name__ == "__main__":
         # print(f'predicted_res {predicted_res}')
         # print(f'target_res {target_res}')
 
-    
         # Root Mean Square Error
         # https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
         resolution_RMSE = compute_RMSE(predicted_res, target_res)
@@ -222,8 +217,8 @@ if __name__ == "__main__":
         jod_RMSE = compute_RMSE(jod_preds, jod_targets)
 
         # Root Mean Squared Percentage Error (RMSPE) 
-        resolution_RMSEP = compute_RMSEP(predicted_res, target_res)
-        fps_RMSEP = compute_RMSEP(predicted_fps, target_fps)
+        resolution_RMSEP = geometric_mean_relative_error(predicted_res, target_res) # compute_RMSEP(predicted_res, target_res)
+        fps_RMSEP = geometric_mean_relative_error(predicted_fps, target_fps) # compute_RMSEP(predicted_fps, target_fps)
         print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
         print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
         print(f'jod rmse {jod_RMSE}')

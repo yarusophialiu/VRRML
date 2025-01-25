@@ -29,16 +29,16 @@ import onnx
 # VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
 # VRR_Patches = f'{VRRDATA}/VRR_Patches'
 # VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
-# VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
-# VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
+VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
+VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
 # VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
 
 # # iron
 # VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
 
 # windows titanium
-VRRML = r'D:\VRR_data\VRRML'
-VRRML_Project = r'D:\VRRML\VRRML'
+# VRRML = r'D:\VRR_data\VRRML'
+# VRRML_Project = r'D:\VRRML\VRRML'
 
 scene_arr = ['bedroom', 'bistro', 
              'crytek_sponza', 'gallery', 
@@ -356,6 +356,27 @@ def count_parameters_onnx(onnx_model_path):
         total_params += num_params
 
     return total_params
+
+
+
+def geometric_mean_relative_error(R_test, R_ref):
+    """geometric mean"""
+    # Compute relative error
+    relative_error = torch.abs(R_test - R_ref) / R_ref
+    
+    # Add a small epsilon to avoid log(0)
+    epsilon = 1e-10
+    relative_error = relative_error + epsilon
+    
+    # Compute the geometric mean
+    geomean = torch.exp(torch.mean(torch.log(relative_error)))
+    
+    # Convert to percentage
+    geomean_percentage = geomean * 100
+    
+    return geomean_percentage
+
+
 
 def compute_RMSE(predicted, target):
     """
