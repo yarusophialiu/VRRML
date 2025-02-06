@@ -2,6 +2,7 @@ import os
 import csv
 import math
 import torch
+import onnx
 import torchvision
 # import seaborn as sns
 import matplotlib.pyplot as plt
@@ -19,6 +20,9 @@ import numpy as np
 # from PIL import Image
 from JOD import *
 import onnx
+from ignite.engine import *
+from ignite.metrics import *
+
 
 
 
@@ -54,6 +58,9 @@ bitrate_map = {500: 0.0, 1000: 0.333, 1500: 0.667, 2000: 1.0}
 
 reverse_fps_map = {0: 30, 1: 40, 2: 50, 3: 60, 4: 70, 5: 80, 6: 90, 7: 100, 8: 110, 9: 120}
 reverse_res_map = {0: 360, 1: 480, 2: 720, 3: 864, 4: 1080}
+        
+# reverse_fps_map = {v: k for k, v in fps_map.items()}
+# reverse_res_map = {v: k for k, v in res_map.items()}
 
 
 bistro_max_comb_per_sequence = {'path1_seg1_1': [[30, 1080], [40, 1080], [50, 1080], [50, 1080]], 'path1_seg1_2': [[70, 720], [80, 720], [80, 1080], [80, 1080]], 'path1_seg1_3': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path1_seg2_1': [[50, 720], [70, 1080], [80, 1080], [80, 1080]], 'path1_seg2_2': [[110, 480], [120, 720], [120, 720], [120, 720]], 'path1_seg2_3': [[110, 480], [120, 720], [120, 720], [120, 720]], 'path1_seg3_1': [[50, 720], [50, 1080], [50, 1080], [60, 1080]], 'path1_seg3_2': [[80, 720], [90, 720], [110, 720], [110, 720]], 'path1_seg3_3': [[110, 720], [120, 720], [120, 720], [120, 720]], 'path2_seg1_1': [[60, 720], [80, 720], [80, 720], [80, 1080]], 'path2_seg1_2': [[90, 720], [110, 720], [120, 720], [120, 720]], 'path2_seg1_3': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path2_seg2_1': [[60, 720], [80, 720], [80, 1080], [80, 1080]], 'path2_seg2_2': [[90, 480], [110, 720], [120, 720], [120, 720]], 'path2_seg2_3': [[120, 360], [120, 480], [120, 480], [120, 720]], 'path2_seg3_1': [[40, 720], [50, 1080], [60, 1080], [60, 1080]], 'path2_seg3_2': [[80, 720], [90, 720], [110, 720], [120, 720]], 'path2_seg3_3': [[110, 480], [120, 720], [120, 720], [120, 720]], 'path3_seg1_1': [[90, 720], [100, 720], [110, 720], [120, 720]], 'path3_seg1_2': [[80, 480], [110, 720], [120, 720], [120, 720]], 'path3_seg1_3': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path3_seg2_1': [[80, 720], [90, 720], [110, 720], [110, 720]], 'path3_seg2_2': [[80, 720], [100, 720], [110, 720], [120, 720]], 'path3_seg2_3': [[80, 480], [110, 720], [120, 720], [120, 720]], 'path3_seg3_1': [[80, 720], [90, 720], [110, 720], [120, 1080]], 'path3_seg3_2': [[110, 480], [120, 720], [120, 720], [120, 720]], 'path3_seg3_3': [[120, 480], [120, 480], [120, 480], [120, 720]], 'path4_seg1_1': [[80, 720], [110, 720], [120, 720], [120, 720]], 'path4_seg1_2': [[110, 480], [120, 720], [120, 720], [120, 720]], 'path4_seg1_3': [[120, 720], [120, 720], [120, 720], [120, 720]], 'path4_seg2_1': [[80, 720], [110, 720], [120, 720], [120, 720]], 'path4_seg2_2': [[110, 480], [120, 720], [120, 720], [120, 720]], 'path4_seg2_3': [[110, 720], [120, 720], [120, 720], [120, 720]], 'path4_seg3_1': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path4_seg3_2': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path4_seg3_3': [[120, 360], [120, 480], [120, 480], [120, 480]], 'path5_seg1_1': [[80, 720], [80, 720], [110, 720], [110, 720]], 'path5_seg1_2': [[80, 720], [110, 720], [120, 720], [120, 720]], 'path5_seg1_3': [[90, 720], [120, 720], [120, 720], [120, 720]], 'path5_seg2_1': [[80, 720], [90, 720], [120, 720], [120, 720]], 'path5_seg2_2': [[80, 720], [120, 720], [120, 720], [120, 720]], 'path5_seg2_3': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path5_seg3_1': [[120, 720], [120, 720], [120, 720], [120, 720]], 'path5_seg3_2': [[120, 480], [120, 720], [120, 720], [120, 720]], 'path5_seg3_3': [[120, 480], [120, 720], [120, 720], [120, 720]]}
@@ -100,6 +107,12 @@ def get_jod_score(all_data, sheet_name, bitrate, fps, resolution):
     # print(type(fps))
     # print(type(resolution))
     return all_data.get(sheet_name, {}).get(bitrate, {}).get(fps, {}).get(resolution, "Not Found")
+
+
+
+def denormalize(normalized_value, min_val=0, max_val=276):
+    original_value = normalized_value * (max_val - min_val) + min_val
+    return original_value
 
 
 def show_patch(patch):
@@ -242,6 +255,20 @@ def zscore_normalization_reverse(sample, data):
     return round(original_sample, 3)
 
 
+def count_parameters_onnx(onnx_model_path):
+    model = onnx.load(onnx_model_path)
+    total_params = 0
+
+    # Iterate through the model's initializer (parameters)
+    for initializer in model.graph.initializer:
+        # Get the parameter shape
+        param_shape = tuple(dim for dim in initializer.dims)
+        # Calculate the number of parameters for this tensor
+        num_params = np.prod(param_shape)
+        total_params += num_params
+
+    return total_params
+
 
 def compute_weighted_loss(res_out, fps_out, res_targets, fps_targets):
     loss_fn_res = nn.CrossEntropyLoss() # CrossEntropyLoss internally apply softmax to logits and calculates the loss
@@ -334,6 +361,51 @@ def count_parameters_onnx(onnx_model_path):
         total_params += num_params
 
     return total_params
+
+
+def eval_step(engine, batch):
+    return batch
+
+def geometric_mean_relative_error(R_test, R_ref, name):
+    """geometric mean"""
+    metric = GeometricAverage()
+    default_evaluator = Engine(eval_step)
+    metric.attach(default_evaluator, 'avg')
+    data = torch.abs((R_test - R_ref) / R_ref)
+    data += 1e-1
+    print(f'data {data.size()} {data}')
+    filename = 'geo_data.py'
+    with open(filename, "a") as file:
+        #     file.write(str(data))
+        # for i in range(0, len(data.size()), 50):  # Step through the tensor in chunks of 50
+        #     line = data[i:i+50].tolist()  # Get a slice of 50 elements and convert to a list
+            # file.write(", ".join(map(str, line)) + "\n")
+        # file.write(data)
+        file.write(f"{name} = {data.tolist()}\n")
+        file.write("\n")
+
+    state = default_evaluator.run(data) 
+        
+    return round(state.metrics['avg'], 4) * 100
+    # return state.metrics['avg'] * 100
+
+
+def relative_error_metric(R_test, R_ref):
+    """
+    Computes (exp(mean(abs(log(R_test) - log(R_ref)))) - 1) * 100 using PyTorch.
+    
+    Args:
+        R_test (torch.Tensor): Tensor of test values.
+        R_ref (torch.Tensor): Tensor of reference values.
+
+    Returns:
+        torch.Tensor: Computed metric value.
+    """
+    log_diff = torch.abs(torch.log(R_test) - torch.log(R_ref))
+    mean_log_diff = torch.mean(log_diff)
+    result = (torch.exp(mean_log_diff) - 1) * 100
+    return round(result.item(), 4)
+
 
 def compute_RMSE(predicted, target):
     """
@@ -530,6 +602,10 @@ def normalize_z_value(column, mean, std_dev):
     # mean = np.mean(data)
     # std_dev = np.std(data)
     return (column - mean) / std_dev
+
+
+def unnormalize_z_value(normalized_column, mean, std_dev):
+    return (normalized_column * std_dev) + mean
 
 
 def normalize_max_min(sample, min_vals, max_vals):
