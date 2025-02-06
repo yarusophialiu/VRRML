@@ -10,7 +10,7 @@ from torch.utils.data import random_split
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset
 
-
+import os
 import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
@@ -19,13 +19,14 @@ from datetime import datetime
 from VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
-from DecRefClassification import *
+from DecRefClassification_smaller import *
 from torch.utils.tensorboard import SummaryWriter
 
 
 # regressin, learn the curves
 # https://docs.google.com/presentation/d/16yqaaq5zDZ5-S4394VLBUfxpNjM7nlpssqcShFkklec/edit#slide=id.g2c751bc0d9c_0_18
 
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 
 def display_img(img,label):
@@ -203,12 +204,11 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
 
 
 
-# OLD from the last VRRML on desktop
 if __name__ == "__main__":
     SAVE_MODEL = True
     SAVE_MODEL_HALF_WAY = False
-    START_TRAINING= False # True False
-    TEST_EVAL = True
+    START_TRAINING= True # True False
+    TEST_EVAL = False
     TEST_UNSEEN_SCENE = False # True
     
     model_pth_path = ""
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     if TEST_EVAL:
         model_pth_path = f'models/patch128-256/patch128_batch128.pth' # patch128_batch128 patch256_batch64
 
-    num_epochs = 16
+    num_epochs = 16 # 16
     lr = 0.0003
     # opt_func = torch.optim.SGD
     opt_func = torch.optim.Adam
@@ -241,11 +241,11 @@ if __name__ == "__main__":
     # print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
     # print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
     # print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
-    # sample = val_dataset[0]
-    # print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-    # print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
-    # print(f'sample path is {sample["path"]}') if VELOCITY else None
-    # print(f'learning rate {lr}, batch_size {batch_size}')
+    sample = dataset[0]
+    print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
+    print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
+    print(f'sample image size {sample["image"].size()}') if VELOCITY else None
+    print(f'learning rate {lr}, batch_size {batch_size}')
 
     device = get_default_device()
     cuda  = device.type == 'cuda'
@@ -314,10 +314,10 @@ if __name__ == "__main__":
 
         predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
         target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
-        print(f'predicted_fps {predicted_fps}')
-        print(f'predicted_res {predicted_res}\n')
-        print(f'target_fps {target_fps}')
-        print(f'target_res {target_res}')
+        # print(f'predicted_fps {predicted_fps}')
+        # print(f'predicted_res {predicted_res}\n')
+        # print(f'target_fps {target_fps}')
+        # print(f'target_res {target_res}')
 
         absolute_errors_fps = torch.abs(predicted_fps - target_fps)
         absolute_errors_res = torch.abs(predicted_res - target_res)
