@@ -39,7 +39,7 @@ VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
 # # iron
 # VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
 
-# windows titanium
+# # windows titanium
 # VRRML = r'D:\VRR_data\VRRML'
 # VRRML_Project = r'D:\VRRML\VRRML'
 
@@ -310,10 +310,9 @@ def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targe
         res_targets_val = find_key_by_value(res_map, res_targets)
         bitrate_val = find_key_by_value(bitrate_map, round(bitrate, 3))
 
-        print(f"corresponding_value {corresponding_value}")
-        print(f"{variable_name} fps, res preds {fps_preds_val, res_preds_val}")
+        # print(f"{variable_name} fps, res preds {fps_preds_val, res_preds_val}")
         # print(f"fps, res targets {fps_targets_val, res_targets_val}")
-        print(f"path_name {path_name}, bitrate_val {bitrate_val}")
+        # print(f"path_name {path_name}, bitrate_val {bitrate_val}")
         pred = get_jod_score(corresponding_value, path_name, bitrate_val, fps_preds_val, str(res_preds_val))
         truth = get_jod_score(corresponding_value, path_name, bitrate_val, fps_targets_val, str(res_targets_val))
         # print(f'pred {pred}, truth {truth}')
@@ -362,6 +361,51 @@ def count_parameters_onnx(onnx_model_path):
         total_params += num_params
 
     return total_params
+
+
+def eval_step(engine, batch):
+    return batch
+
+def geometric_mean_relative_error(R_test, R_ref, name):
+    """geometric mean"""
+    metric = GeometricAverage()
+    default_evaluator = Engine(eval_step)
+    metric.attach(default_evaluator, 'avg')
+    data = torch.abs((R_test - R_ref) / R_ref)
+    data += 1e-1
+    print(f'data {data.size()} {data}')
+    filename = 'geo_data.py'
+    with open(filename, "a") as file:
+        #     file.write(str(data))
+        # for i in range(0, len(data.size()), 50):  # Step through the tensor in chunks of 50
+        #     line = data[i:i+50].tolist()  # Get a slice of 50 elements and convert to a list
+            # file.write(", ".join(map(str, line)) + "\n")
+        # file.write(data)
+        file.write(f"{name} = {data.tolist()}\n")
+        file.write("\n")
+
+    state = default_evaluator.run(data) 
+        
+    return round(state.metrics['avg'], 4) * 100
+    # return state.metrics['avg'] * 100
+
+
+def relative_error_metric(R_test, R_ref):
+    """
+    Computes (exp(mean(abs(log(R_test) - log(R_ref)))) - 1) * 100 using PyTorch.
+    
+    Args:
+        R_test (torch.Tensor): Tensor of test values.
+        R_ref (torch.Tensor): Tensor of reference values.
+
+    Returns:
+        torch.Tensor: Computed metric value.
+    """
+    log_diff = torch.abs(torch.log(R_test) - torch.log(R_ref))
+    mean_log_diff = torch.mean(log_diff)
+    result = (torch.exp(mean_log_diff) - 1) * 100
+    return round(result.item(), 4)
+
 
 def compute_RMSE(predicted, target):
     """
