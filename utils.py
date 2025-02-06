@@ -20,6 +20,9 @@ import numpy as np
 # from PIL import Image
 from JOD import *
 import onnx
+from ignite.engine import *
+from ignite.metrics import *
+
 
 
 
@@ -358,23 +361,19 @@ def count_parameters_onnx(onnx_model_path):
     return total_params
 
 
+def eval_step(engine, batch):
+    return batch
 
 def geometric_mean_relative_error(R_test, R_ref):
     """geometric mean"""
-    # Compute relative error
-    relative_error = torch.abs(R_test - R_ref) / R_ref
-    
-    # Add a small epsilon to avoid log(0)
-    epsilon = 1e-10
-    relative_error = relative_error + epsilon
-    
-    # Compute the geometric mean
-    geomean = torch.exp(torch.mean(torch.log(relative_error)))
-    
-    # Convert to percentage
-    geomean_percentage = geomean * 100
-    
-    return geomean_percentage
+    metric = GeometricAverage()
+    default_evaluator = Engine(eval_step)
+    metric.attach(default_evaluator, 'avg')
+    # Case 1. input is er
+    data = torch.abs((R_test - R_ref) / R_ref)
+    state = default_evaluator.run(data)
+        
+    return round(state.metrics['avg'], 4)
 
 
 
