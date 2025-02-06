@@ -88,6 +88,7 @@ def evaluate_test_data(model, test_loader):
             # print(f'jod_preds {jod_preds}')
             jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
             jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+            
             # result = {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
             #     'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)} 
             # print(f'result {result}')
@@ -129,9 +130,6 @@ def evaluate_test_data(model, test_loader):
 # disable each parameter and test model performance 
 # change model(images, fps, bitrate, velocity) in evaluate_test_data based on the used model
 if __name__ == "__main__":
-    SAVE_MODEL = True
-    SAVE_MODEL_HALF_WAY = True
-    START_TRAINING= False # True False
     TEST_EVAL = True
     TEST_UNSEEN_SCENE = True # True False
     
@@ -140,36 +138,25 @@ if __name__ == "__main__":
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
         data_test_directory = f'{VRRML}/ML_smaller/test_scenes128x128' # test_64x64 test_scenes64x64 test_scenes128x128
+        # data_test_directory = f'{VRRML}/ML/test_dropJOD_64x64' # test_64x64 test_scenes64x64 test_scenes128x128
     else:
-        data_test_directory = f'{VRRML}/{folder}/test'
-    data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
-    data_val_directory = f'{VRRML}/{folder}/validation'  
+        data_test_directory = f'{VRRML}/{folder}/test' 
     
     if TEST_EVAL:
-        model_pth_path = f'models/smaller_model/classification.pth' # classification150 patch128_batch128 patch256_batch64
+        model_pth_path = f'2025-01-31/dropJOD/classification.pth' # models/smaller_model/classification.pth
 
-    num_epochs = 16
-    lr = 0.0003
-    # opt_func = torch.optim.SGD
-    opt_func = torch.optim.Adam
+    MODEL_VELOCITY = True
+    FPS = False # True False
+    RESOLUTION = False
+
     batch_size = 128 
-    patch_size = (128, 128) # change patch structure in DecRefClassification_test.py
+    patch_size = (256, 256) # change patch structure in DecRefClassification_test.py
 
     num_framerates, num_resolutions = 10, 5
-    VELOCITY = True
     VALIDATION = True
+    VELOCITY = True
     CHECKPOINT = False
-
-    dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
-    val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
-    print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
-    print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
-    print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
-    sample = val_dataset[0]
-    print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-    print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
-    print(f'sample path is {sample["path"]}') if VELOCITY else None
-    print(f'learning rate {lr}, batch_size {batch_size}')
+    FRAMENUMBER = False # False
 
     device = get_default_device()
     cuda  = device.type == 'cuda'
@@ -178,7 +165,6 @@ if __name__ == "__main__":
         torch.manual_seed(42)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        # framenumber = True for patch 64x64
         test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, \
                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, \
                                                 VALIDATION=VALIDATION, FRAMENUMBER=False) # len 27592
@@ -196,12 +182,6 @@ if __name__ == "__main__":
         print(f'model_path {model_pth_path}')
         print(f'TEST_UNSEEN_SCENE {TEST_UNSEEN_SCENE}')
         result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
-                        # res_values, fps_values, unique_indices = evaluate_test_data(model, test_dl)
-        
-        reverse_fps_map = {v: k for k, v in fps_map.items()}
-        reverse_res_map = {v: k for k, v in res_map.items()}
-
-        # Convert the predicted and target indices to actual values
         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
         target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
 
@@ -216,15 +196,26 @@ if __name__ == "__main__":
         fps_RMSE = compute_RMSE(predicted_fps, target_fps)
         jod_RMSE = compute_RMSE(jod_preds, jod_targets)
 
-        # Root Mean Squared Percentage Error (RMSPE) 
-        resolution_RMSEP = geometric_mean_relative_error(predicted_res, target_res) # compute_RMSEP(predicted_res, target_res)
-        fps_RMSEP = geometric_mean_relative_error(predicted_fps, target_fps) # compute_RMSEP(predicted_fps, target_fps)
+        # Root Mean Squared Percentage Error (RMSPE)
+        resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
+        fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
+        # resolution_RMSEP = geometric_mean_relative_error(predicted_res, target_res, "resolution") # compute_RMSEP(predicted_res, target_res)
+        # fps_RMSEP = geometric_mean_relative_error(predicted_fps, target_fps, "fps") # compute_RMSEP(predicted_fps, target_fps)
         print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
         print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
         print(f'jod rmse {jod_RMSE}')
         print(f'test result \n {result}\n')
 
+
+    # SAVE_MODEL = True
+    # SAVE_MODEL_HALF_WAY = True
+    # START_TRAINING= False # True False
+    # data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
+    # data_val_directory = f'{VRRML}/{folder}/validation' 
     # if START_TRAINING:
+        # num_epochs = 16
+        # lr = 0.0003
+        # opt_func = torch.optim.Adam
     #     model = DecRefClassification_test(num_framerates, num_resolutions, VELOCITY=VELOCITY)
     #     optimizer = opt_func(model.parameters(),lr)
     #     epochs = range(num_epochs)
