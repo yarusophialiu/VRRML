@@ -32,16 +32,16 @@ from ignite.metrics import *
 # VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
 # VRR_Patches = f'{VRRDATA}/VRR_Patches'
 # VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
-# VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
-# VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
+VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
+VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
 # VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
 
 # # iron
 # VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
 
-# windows titanium
-VRRML = r'D:\VRR_data\VRRML'
-VRRML_Project = r'D:\VRRML\VRRML'
+# # windows titanium
+# VRRML = r'D:\VRR_data\VRRML'
+# VRRML_Project = r'D:\VRRML\VRRML'
 
 scene_arr = ['bedroom', 'bistro', 
              'crytek_sponza', 'gallery', 

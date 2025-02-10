@@ -16,10 +16,10 @@ import torch.nn.functional as F
 from PIL import Image
 from datetime import datetime
 
-from VideoSinglePatchDataset import VideoSinglePatchDataset
+from legacy.VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
-from DecRefClassification_smaller import *
+from DecRefClassification import *
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -205,14 +205,14 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
 
 
 if __name__ == "__main__":
-    SAVE_MODEL = True
+    SAVE_MODEL = False
     SAVE_MODEL_HALF_WAY = False
     START_TRAINING= True # True False
     TEST_EVAL = False
     TEST_UNSEEN_SCENE = False # True
     
     model_pth_path = ""
-    folder = 'ML/reference128x128' # TODO change model size reference128x128
+    folder = 'ML_smaller/reference128x128' # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
         data_test_directory = f'{VRRML}/ML/test_scenes128x128' 
@@ -238,14 +238,15 @@ if __name__ == "__main__":
 
     dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY) # len 27592
     val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION) # len 27592
+    
     # print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
     # print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
     # print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
-    sample = dataset[0]
-    print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-    print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
-    print(f'sample image size {sample["image"].size()}') if VELOCITY else None
-    print(f'learning rate {lr}, batch_size {batch_size}')
+    # sample = val_dataset[0]
+    # print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
+    # print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
+    # print(f'sample path is {sample["path"]}') if VELOCITY else None
+    # print(f'learning rate {lr}, batch_size {batch_size}')
 
     device = get_default_device()
     cuda  = device.type == 'cuda'

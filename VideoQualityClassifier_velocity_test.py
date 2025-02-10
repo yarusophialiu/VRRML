@@ -168,7 +168,7 @@ if __name__ == "__main__":
         torch.backends.cudnn.benchmark = False
         test_dataset = VideoDualPatchDataset(directory=data_test_directory, min_bitrate=500, \
                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, \
-                                                VALIDATION=VALIDATION, FRAMENUMBER=FRAMENUMBER) # len 27592
+                                                VALIDATION=VALIDATION, FRAMENUMBER=False) # len 27592
         print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
         sample = test_dataset[0]
         # print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
@@ -194,9 +194,11 @@ if __name__ == "__main__":
 
         predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
         target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
-        # print(f'predicted_res {predicted_res}')
-        # print(f'target_res {target_res}')
+        print(f'predicted_res {predicted_res}')
+        print(f'target_res {target_res}')
 
+        # Root Mean Square Error
+        # https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
         resolution_RMSE = compute_RMSE(predicted_res, target_res)
         fps_RMSE = compute_RMSE(predicted_fps, target_fps)
         jod_RMSE = compute_RMSE(jod_preds, jod_targets)
