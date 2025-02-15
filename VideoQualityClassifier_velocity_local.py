@@ -28,33 +28,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-def display_img(img,label):
-    print(f"Label : {dataset.classes[label]}")
-    plt.imshow(img.permute(1,2,0))
-    plt.show()
-
-def show_batch(dl):
-    """Plot images grid of single batch"""
-    for batch in dl: # dl calls __getitem__
-        images = batch["image"]
-        print(f'images {images.dtype}')
-        labels = batch["label"]
-        print(f'Labels: {labels}')
-        fig,ax = plt.subplots(figsize = (16,12))
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.imshow(make_grid(images,nrow=16).permute(1,2,0))
-        plt.show()
-        break
-
-
-
-
-def accuracy(outputs, labels):
-    _, preds = torch.max(outputs, dim=1)
-    return torch.tensor(torch.sum(preds == labels).item() / len(preds))
-
-
 @torch.no_grad()
 def evaluate(model, val_loader):
     model.eval()
@@ -81,8 +54,6 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
     # runs_path = os.path.join(dir_pth, now.strftime("%H_%M"))
     # os.makedirs(f'runs/{runs_path}', exist_ok=True)
     writer = SummaryWriter(model_path)  # f'runs/{runs_path}'
-    
-
     # an epoch is one pass through the entire dataset
     for epoch in epochs:
         print(f'================================ epoch {epoch} ================================')
@@ -90,20 +61,13 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
         train_losses = []
         count = 0
         running_loss = 0.0
-        # for each batch, compute gradients for every data
-        # after the batch finishes, evaluate
+        # for each batch, compute gradients for every data, evaluate after each batch
         # requests an iterator from DeviceDataLoader, i.e. __iter__ function
 
         # are batch1 and batch2 not overlap? NO when you use DataLoader with shuffle=True, 
         # batches will not overlap during training
-        # do all batches cover the whole dataset?
         for batch in train_loader: # batch is a dictionary with 32 images information, e.g. 'fps': [70, 80, ..., 150]
-            # print(f'batch {batch[fps]}')
-            # print(f'=============== batch {count} ===============') # train_size / batch_size
             count += 1
-            # images= batch['image']
-            # print(f"Input batch shape: {images.size()}")
-            # get accuracy
             loss = model.training_step(batch, VELOCITY=VELOCITY) # model
             train_losses.append(loss)
             running_loss += loss.item()
@@ -114,10 +78,7 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
             optimizer.step() # update the model parameters based on the gradients calculated
             optimizer.zero_grad() # clears the old gradients, so they don't accumulate
 
-        # avg_train_loss = running_loss / len(train_loader) # len(train_loader) is number of batches
         result = evaluate(model, val_loader) # val_loss val_res_acc val_fps_acc val_both_acc
-        # Log training and validation metrics to TensorBoard
-        # writer.add_scalar('Loss/train', avg_train_loss, epoch)
         writer.add_scalar('Loss/validation', result['val_loss'], epoch)
         writer.add_scalar('Accuracy/val_res_acc', result['val_res_acc'], epoch)
         writer.add_scalar('Accuracy/val_fps_acc', result['val_fps_acc'], epoch)
@@ -127,12 +88,8 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
         writer.add_scalar('Loss/resolution_RMSEP', result['resolution_RMSEP'], epoch)
         writer.add_scalar('Loss/fps_RMSE', result['fps_RMSE'], epoch)
         writer.add_scalar('Loss/fps_RMSEP', result['fps_RMSEP'], epoch)
-
-        # print(f'result \n {result}')
         result['train_loss'] = torch.stack(train_losses).mean().item()
         writer.add_scalar('Loss/train', result['train_loss'], epoch)
-        # print(f'len(val_loader) {len(val_loader)}, avg_train_loss {avg_train_loss} {torch.stack(train_losses).mean().item()}')
-
         model.epoch_end(epoch, result)
         history.append(result)
 
@@ -140,7 +97,6 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
             os.makedirs(model_path, exist_ok=True)
             print(f"Epoch {epoch} is a multiple of 10.")
             save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
-        
     if SAVE_MODEL:
         os.makedirs(model_path, exist_ok=True)
         torch.save(model.state_dict(), f'{model_path}/classification.pth')
@@ -191,8 +147,15 @@ def fetch_test_dataloader(batch_size, patch_size, device, FRAMENUMBER=True):
     test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
     test_dl = DeviceDataLoader(test_dl, device) 
     return test_dl
-    
 
+def set_manual_seed():
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42) # Ensure CUDA also uses the same seed
+    torch.cuda.manual_seed_all(42)  # If using multi-GPU
+    np.random.seed(42) # Ensure reproducibility with NumPy and Python's random
+    torch.backends.cudnn.deterministic = True # Ensure deterministic behavior (may slow down training slightly)
+    torch.backends.cudnn.benchmark = False
+ 
 
 
 # train smaller model
@@ -224,14 +187,8 @@ if __name__ == "__main__":
 
     device = get_default_device()
     saved_model_path = None
-
-    torch.manual_seed(42)
-    torch.cuda.manual_seed(42) # Ensure CUDA also uses the same seed
-    torch.cuda.manual_seed_all(42)  # If using multi-GPU
-    np.random.seed(42) # Ensure reproducibility with NumPy and Python's random
-    torch.backends.cudnn.deterministic = True # Ensure deterministic behavior (may slow down training slightly)
-    torch.backends.cudnn.benchmark = False
-    
+    set_manual_seed()
+   
     if START_TRAINING:
         print(f'Start training...')
         model = DecRefClassification(FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
