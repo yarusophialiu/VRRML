@@ -34,17 +34,17 @@ class ImageClassificationBase(nn.Module):
         resolution_target = metadata[:, 3]
         image_bitrate = metadata[:, 4]
         velocity = metadata[:, 5]
-        # print(f'images {images.size()}')
-        # print(f'fps {fps}')
-        # print(f'resolution {resolution}')
-        # print(f'fps_target {fps_target}')
-        # print(f'resolution_target {resolution_target}')
-        # print(f'image_bitrate {image_bitrate}')
-        # print(f'velocity {velocity}')
+        # print(f'images {images.size()} \n {images}')
+        # print(f'fps  {type(fps)} {fps}')
+        # print(f'resolution  {type(resolution)}{resolution}')
+        # print(f'fps_target  {type(fps_target)}{fps_target}')
+        # print(f'resolution_target {type(resolution_target)} {resolution_target}')
+        # print(f'image_bitrate {type(image_bitrate)} {image_bitrate}')
+        # print(f'velocity  {type(velocity)} {velocity}')
         # print(f'\n\n\n training step')
         
         if VELOCITY:
-            print(f'forward with velocity {VELOCITY}')
+            # print(f'forward with velocity {VELOCITY}')
             res_out, fps_out = self(images, fps, image_bitrate, resolution, velocity)  # NaturalSceneClassification.forward
         else:
             res_out, fps_out = self(images, fps, image_bitrate, resolution)
@@ -68,17 +68,16 @@ class ImageClassificationBase(nn.Module):
         image_bitrate = metadata[:, 4]
         velocity = metadata[:, 5]
         res_out, fps_out = self(images, fps, image_bitrate, resolution, velocity)  # NaturalSceneClassification.forward
-        # print(f'training_step out {out.size()} \n {out.squeeze()}')
-        # print(f'res_targets {res_targets}')
-        # loss_fn_res = nn.CrossEntropyLoss()
-        # loss_fn_fps = nn.CrossEntropyLoss()
+        # print(f'validation_step fps_out {fps_out.size()} \n {fps_out}')
+        # print(f'validation_step res_out {res_out.size()} \n {res_out}')
+        # print(f'validation_step fps_target {fps_target.size()} \n {fps_target}')
+        # print(f'validation_step resolution_target {resolution_target.size()} \n {resolution_target}')
     
         total_loss = compute_weighted_loss(res_out, fps_out, resolution_target.long(), fps_target.long())
         framerate_accuracy, resolution_accuracy, both_correct_accuracy = compute_accuracy(fps_out, res_out, fps_target, resolution_target)
 
+        # compute jod loss
         # Calculate accuracy, i.e.  proportion of the variance in the dependent variable that is predictable 
-     
-        # print(f'val_r2_score {val_r2_score}\n\n\n')
         return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, 'both_acc': both_correct_accuracy} 
         
 
