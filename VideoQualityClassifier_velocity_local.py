@@ -1,29 +1,27 @@
 import os 
 import time
 import torch
-import torchvision
+# import torchvision
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
-from torchvision import transforms
-from torchvision.datasets import ImageFolder
+# import matplotlib.pyplot as plt
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data import random_split
-from torchvision.utils import make_grid
-from torch.utils.data import Dataset
+# from torch.utils.data import Dataset
 from EarlyStopping import EarlyStopping
 
-import torch.nn as nn
-import torch.nn.functional as F
-from PIL import Image
+# import torch.nn as nn
+# import torch.nn.functional as F
+# from PIL import Image
 from datetime import datetime
 
 from VideoSinglePatchDataset import VideoSinglePatchDataset
 from VideoDualPatchDataset import VideoDualPatchDataset
+from VideoMultiplePatchDataset import VideoMultiplePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
 from DecRefClassification_smaller import *
 from DecRefClassification_dual_smaller import *
+from DecRefClassification_multiple_smaller import *
 from VideoQualityClassifier_velocity_test import evaluate_test_data
 from torch.utils.tensorboard import SummaryWriter
 
@@ -135,28 +133,37 @@ def load_checkpoint_from_path(path, model, optimizer):
     return model, epochs, optimizer
 
 def fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True):
+    data_folder = f'ML_smaller/{velocity_type}/train_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
+    if 'invariant_consecutive' in patch_type:
+        data_folder = f'ML_smaller/{velocity_type}/train_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
+    if 'invariant_random' in patch_type:
+        data_folder = f'ML_smaller/{velocity_type}/train_random_{PATCH_SIZE}x{PATCH_SIZE}' 
+
     if patch_type == 'single':
+        print(f'training_mode {args.training_mode} VideoSinglePatchDataset')
         dataset = VideoSinglePatchDataset(directory=f'{VRRML}/{data_folder}/train', min_bitrate=500, max_bitrate=2000, \
-                                        patch_size=patch_size, VELOCITY=True, FRAMENUMBER=FRAMENUMBER) # len 27592
+                                          patch_size=patch_size, VELOCITY=True, FRAMENUMBER=FRAMENUMBER) # len 27592
         val_dataset = VideoSinglePatchDataset(directory=f'{VRRML}/{data_folder}/validation', min_bitrate=500, max_bitrate=2000, \
                                             patch_size=patch_size, VELOCITY=True, VALIDATION=True, FRAMENUMBER=FRAMENUMBER) # len 27592
-        print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
-        print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
-        sample = val_dataset[0]
-        print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-        print(f'normalized velocity is {sample["velocity"]}, path is {sample["path"]}')
-        print(f'learning rate {lr}, batch_size {batch_size}')
+    elif 'invariant' in args.training_mode: # patch_type == 'consecutive' or 'random':
+        print(f'training_mode {args.training_mode} VideoMultiplePatchDataset')
+        dataset = VideoMultiplePatchDataset(directory=f'{VRRML}/{data_folder}/train', min_bitrate=500, max_bitrate=2000, \
+                                            patch_size=patch_size, VELOCITY=True, FRAMENUMBER=FRAMENUMBER)
+        val_dataset = VideoMultiplePatchDataset(directory=f'{VRRML}/{data_folder}/validation', min_bitrate=500, max_bitrate=2000, \
+                                            patch_size=patch_size, VELOCITY=True, VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
     else:
+        print(f'training_mode {args.training_mode} VideoDualPatchDataset')
         dataset = VideoDualPatchDataset(directory=f'{VRRML}/{data_folder}/train', min_bitrate=500, max_bitrate=2000, \
-                                        patch_size=patch_size, VELOCITY=True, FRAMENUMBER=FRAMENUMBER) # len 27592
+                                        patch_size=patch_size, VELOCITY=True, FRAMENUMBER=FRAMENUMBER)
         val_dataset = VideoDualPatchDataset(directory=f'{VRRML}/{data_folder}/validation', min_bitrate=500, max_bitrate=2000, \
-                                            patch_size=patch_size, VELOCITY=True, VALIDATION=True, FRAMENUMBER=FRAMENUMBER) # len 27592
-        print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
-        print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
-        sample = val_dataset[0]
-        print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-        print(f'normalized velocity is {sample["velocity"]}, path is {sample["path"]}')
-        print(f'learning rate {lr}, batch_size {batch_size}')
+                                            patch_size=patch_size, VELOCITY=True, VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+        
+    print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
+    print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
+    sample = val_dataset[0]
+    print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
+    print(f'normalized velocity is {sample["velocity"]}, path is {sample["path"]}')
+    print(f'learning rate {lr}, batch_size {batch_size}')
 
     train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
     val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
@@ -167,21 +174,46 @@ def fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=Tru
     return train_dl, val_dl
 
 def fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True):
+    data_test_folder = f'ML_smaller/{velocity_type}/test_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
+    if 'invariant_consecutive' in patch_type:
+        data_test_folder = f'ML_smaller/{velocity_type}/test_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
+    if 'invariant_random' in patch_type:
+        data_test_folder = f'ML_smaller/{velocity_type}/test_random_{PATCH_SIZE}x{PATCH_SIZE}' 
+
     if patch_type == 'single':
+        print(f'training_mode {args.training_mode} VideoSinglePatchDataset')
         test_dataset = VideoSinglePatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
                                                 max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
-                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER) # len 27592
-        print(f'Test data size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
-        # sample = test_dataset[0]
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+    elif 'invariant' in args.training_mode:
+        print(f'training_mode {args.training_mode} VideoMultiplePatchDataset')
+        test_dataset = VideoMultiplePatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
+                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
     else:
+        print(f'training_mode {args.training_mode} VideoDualPatchDataset')
         test_dataset = VideoDualPatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
                                                 max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
-                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER) # len 27592
-        print(f'\nTest data size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
-   
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+    print(f'\nTest data size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
     test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
     test_dl = DeviceDataLoader(test_dl, device) 
     return test_dl
+
+
+def fetch_model(patch_type):
+    model = None
+    if patch_type == 'single':
+        print(f'patch_type {patch_type}, training_mode {args.training_mode}, DecRefClassification')
+        model = DecRefClassification(FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
+    elif 'invariant' in args.training_mode:
+        print(f'patch_type{patch_type}, training_mode {args.training_mode}, DecRefClassification_multiple')
+        model = DecRefClassification_multiple(FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
+    else: # consecutive_patch, consecutive_patch_no_velocity, random_patch
+        print(f'patch_type{patch_type}, training_mode {args.training_mode}, DecRefClassification_dual')
+        model = DecRefClassification_dual(FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
+    return model
+
 
 def set_manual_seed():
     torch.manual_seed(42)
@@ -206,8 +238,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Training Configuration")
     parser.add_argument('--training_mode', type=str, choices=[
-        'no_fps', 'no_res', 'no_fps_no_resolution', 'no_velocity', 
-        'consecutive_patch', 'consecutive_patch_no_velocity', 'random_patch'
+                        'no_fps', 'no_res', 'no_fps_no_resolution', 'no_velocity', 
+                        'consecutive_patch', 'consecutive_patch_no_velocity', 'random_patch', 
+                        'full', 'invariant_consecutive', 'invariant_random', 
+                        'invariant_consecutive_no_velocity', 'invariant_random_no_velocity'
     ], required=True, help="Specify the training mode")
     args = parser.parse_args()
 
@@ -216,9 +250,14 @@ if __name__ == "__main__":
         'no_res': {'FPS': True, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'no_fps_no_resolution': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'single'},
+        'full': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'consecutive_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
         'consecutive_patch_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
-        'random_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'random'}
+        'random_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'random'},
+        'invariant_consecutive': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
+        'invariant_consecutive_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
+        'invariant_random': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'random'},
+        'invariant_random_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'random'},
     }
 
     config = training_params[args.training_mode]
@@ -230,8 +269,6 @@ if __name__ == "__main__":
 
     velocity_type = 'frame-velocity' # frame-velocity patch-velocity
     PATCH_SIZE = 64
-    data_folder = f'ML_smaller/{velocity_type}/train_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
-    data_test_folder = f'ML_smaller/{velocity_type}/test_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
     checkpoint_path = ''
 
     lr = 0.0003
@@ -248,55 +285,52 @@ if __name__ == "__main__":
     if START_TRAINING:
         print(f'Start training...')
         start_time = time.time()
-        if patch_type == 'single':
-            model = DecRefClassification(FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
-        else:
-            model = DecRefClassification_dual(FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
+        model = fetch_model(patch_type)
         optimizer = opt_func(model.parameters(), lr)
         epochs = range(num_epochs)
         if CHECKPOINT:
             model, epochs, optimizer = load_checkpoint_from_path(checkpoint_path, model, optimizer)
         model.to(device)
         train_dl, val_dl = fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=FRAMENUMBER)
-        history, model, saved_model_path = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, SAVE_MODEL=SAVE_MODEL, \
-                                               SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=True, CHECKPOINT=CHECKPOINT)
-        elapsed_time = time.time() - start_time  # Compute elapsed time
-        hours = int(elapsed_time // 3600)
-        minutes = int((elapsed_time % 3600) // 60)
-        seconds = int(elapsed_time % 60)
-        print(f"Elapsed Time: {hours}h {minutes}m {seconds}s")
+        # history, model, saved_model_path = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, SAVE_MODEL=SAVE_MODEL, \
+        #                                        SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=True, CHECKPOINT=CHECKPOINT)
+        # elapsed_time = time.time() - start_time  # Compute elapsed time
+        # hours = int(elapsed_time // 3600)
+        # minutes = int((elapsed_time % 3600) // 60)
+        # seconds = int(elapsed_time % 60)
+        # print(f"Elapsed Time: {hours}h {minutes}m {seconds}s")
 
 
     if TEST_EVAL:
         print('\nTest evaluating...')
         test_dl = fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True)        
-        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
-        predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
-        target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
+        # result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
+        # predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
+        # target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
 
-        predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
-        target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
-        print(f'predicted_res {predicted_res}')
-        print(f'target_res {target_res}')
+        # predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
+        # target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
+        # print(f'predicted_res {predicted_res}')
+        # print(f'target_res {target_res}')
 
-        # Root Mean Square Error https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
-        resolution_RMSE = compute_RMSE(predicted_res, target_res)
-        fps_RMSE = compute_RMSE(predicted_fps, target_fps)
-        jod_RMSE = compute_RMSE(jod_preds, jod_targets)
+        # # Root Mean Square Error https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+        # resolution_RMSE = compute_RMSE(predicted_res, target_res)
+        # fps_RMSE = compute_RMSE(predicted_fps, target_fps)
+        # jod_RMSE = compute_RMSE(jod_preds, jod_targets)
 
-        # Root Mean Squared Percentage Error (RMSPE)
-        resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
-        fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
-        print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
-        print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
-        print(f'jod rmse {jod_RMSE}')
-        print(f'test result \n {result}\n')
+        # # Root Mean Squared Percentage Error (RMSPE)
+        # resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
+        # fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
+        # print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
+        # print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
+        # print(f'jod rmse {jod_RMSE}')
+        # print(f'test result \n {result}\n')
 
-        # TODO: rename saved_model_path based on training type
-        with open(f'{saved_model_path}/model.txt', 'a') as f:
-            f.write(f"Elapsed Time: {hours}h {minutes}m {seconds}s\n\n")
-            f.write(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%\n")
-            f.write(f'Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n')
-            f.write(f'test result \n {result}\n\n')
-            f.write(f"{round(fps_RMSE, 1)} {round(fps_RMSEP)}%\n")
-            f.write(f'{round(resolution_RMSE, 1)} {round(resolution_RMSEP)}%\n')
+        # # TODO: rename saved_model_path based on training type
+        # with open(f'{saved_model_path}/model.txt', 'a') as f:
+        #     f.write(f"Elapsed Time: {hours}h {minutes}m {seconds}s\n\n")
+        #     f.write(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%\n")
+        #     f.write(f'Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n')
+        #     f.write(f'test result \n {result}\n\n')
+        #     f.write(f"{round(fps_RMSE, 1)} {round(fps_RMSEP)}%\n")
+        #     f.write(f'{round(resolution_RMSE, 1)} {round(resolution_RMSEP)}%\n')
