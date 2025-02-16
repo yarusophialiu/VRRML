@@ -202,7 +202,9 @@ if __name__ == "__main__":
     CHECKPOINT = False
     TEST_EVAL = True
     PATIENCE = 10 # early stopping
-    num_epochs = 1 # 150
+    num_epochs = 150 # 150
+    ML_DATA_TYPE = 'ML' # ML_smaller
+    PATCH_SIZE = 64
 
     parser = argparse.ArgumentParser(description="Training Configuration")
     parser.add_argument('--training_mode', type=str, choices=[
@@ -216,6 +218,7 @@ if __name__ == "__main__":
         'no_res': {'FPS': True, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'no_fps_no_resolution': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'single'},
+        'full': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'consecutive_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
         'consecutive_patch_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
         'random_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'random'}
@@ -229,9 +232,8 @@ if __name__ == "__main__":
     print(f'FPS {FPS}, RESOLUTION {RESOLUTION}, MODEL_VELOCITY {MODEL_VELOCITY}, patch_type {patch_type}')
 
     velocity_type = 'frame-velocity' # frame-velocity patch-velocity
-    PATCH_SIZE = 64
-    data_folder = f'ML_smaller/{velocity_type}/train_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
-    data_test_folder = f'ML_smaller/{velocity_type}/test_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
+    data_folder = f'{ML_DATA_TYPE}/{velocity_type}/train_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
+    data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
     checkpoint_path = ''
 
     lr = 0.0003

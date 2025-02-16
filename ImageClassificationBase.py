@@ -34,17 +34,17 @@ class ImageClassificationBase(nn.Module):
         resolution_target = metadata[:, 3]
         image_bitrate = metadata[:, 4]
         velocity = metadata[:, 5]
-        # print(f'images {images.size()}')
-        # print(f'fps {fps}')
-        # print(f'resolution {resolution}')
-        # print(f'fps_target {fps_target}')
-        # print(f'resolution_target {resolution_target}')
-        # print(f'image_bitrate {image_bitrate}')
-        # print(f'velocity {velocity}')
+        # print(f'images {images.size()} {images.dtype}')
+        # print(f'fps {fps.dtype}')
+        # print(f'resolution {resolution.dtype}')
+        # print(f'fps_target {fps_target.dtype}')
+        # print(f'resolution_target {resolution_target.dtype}')
+        # print(f'image_bitrate {image_bitrate.dtype}')
+        # print(f'velocity {velocity.dtype}')
         # print(f'\n\n\n training step')
         
         if VELOCITY:
-            print(f'forward with velocity {VELOCITY}')
+            # print(f'forward with velocity {VELOCITY}')
             res_out, fps_out = self(images, fps, image_bitrate, resolution, velocity)  # NaturalSceneClassification.forward
         else:
             res_out, fps_out = self(images, fps, image_bitrate, resolution)

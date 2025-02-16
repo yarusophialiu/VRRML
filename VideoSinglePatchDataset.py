@@ -93,7 +93,6 @@ class VideoSinglePatchDataset(Dataset):
         fps = self.normalize(fps, self.min_fps, self.max_fps)
         pixel = self.normalize(pixel, self.min_res, self.max_res)
         bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
-        # TODO: normalize velocity
         velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
         framenumber = self.normalize(framenumber, 0, 276) if self.framenumber else -1
 
