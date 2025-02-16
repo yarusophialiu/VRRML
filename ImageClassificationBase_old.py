@@ -26,58 +26,21 @@ from utils import *
 
 class ImageClassificationBase(nn.Module):
     def training_step(self, batch, VELOCITY=True):
-        # print(f'================== training_step ==================')
         images = batch["image"]
         fps = batch["fps"]
         bitrate = batch["bitrate"]
         resolution = batch["resolution"]
         velocity = batch["velocity"] # if VELOCITY else 0
-        # jod = batch["jod"]
-        # print(f'velocity {VELOCITY} {velocity}')
-
         res_targets = batch["res_targets"]
         fps_targets = batch["fps_targets"]
         
-        # print(f'images {images.size()} {images.dtype}')
-
-        # image = images[0]  # Shape [4, 128, 128]
-        # pil_image = to_pil_image(image)
-        # pil_image.show()
-
-        # rgb_images = images[:, :3, :, :] 
-        # image = rgb_images[0]  # Shape [3, Height, Width]
-        # pil_image2 = to_pil_image(image)
-        # pil_image2.show()
-
-        # print(f'fps {fps.dtype}') # fps, resolution, bitrate, velocity float64
-        # print(f'resolution {resolution.dtype}')
-        # print(f'fps_target {fps_targets.dtype}')
-        # print(f'resolution_target {res_targets.dtype}') # fps resolution targets int64
-        # print(f'image_bitrate {bitrate.dtype}')
-        # print(f'velocity {velocity.dtype}')
-        # print(f'\n\n\n training step')
-        
-        if VELOCITY:
-            # TODO
-            res_out, fps_out = self(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
-            # res_out, fps_out = self(images, bitrate, velocity)  # NaturalSceneClassification.forward
-        # else:
-        #     res_out, fps_out = self(images, fps, bitrate, resolution)
-
-        # print(f'res_out {res_out.size()} \n {res_out}')
-        # print(f'res_targets {res_targets.size()} \n {res_targets}')
-        # print(f'fps_out {fps_out.size()} \n {fps_out}')
+        res_out, fps_out = self(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
         total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
         # loss = F.mse_loss(out.squeeze(), labels.float()) # Calculate loss
-        # print(f'loss_res {loss_res}')
-        # print(f'loss_fps {loss_fps}')
-
         return total_loss
     
     def validation_step(self, batch):
-        # print(f'\n\n\n validation step')
         images = batch["image"]
-        # labels = batch["label"]
         fps = batch["fps"]
         bitrate = batch["bitrate"]
         resolution = batch["resolution"]
