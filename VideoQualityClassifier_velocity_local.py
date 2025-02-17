@@ -103,6 +103,7 @@ def fit(epochs, model, train_loader, val_loader, optimizer, training_mode, \
         if early_stopping.early_stop:
             print(f"Early stopping triggered. Training stopped at epoch {epoch}.")
             early_stopping_triggered = True
+            TRAINED_EPOCH = epoch
             break
 
         if SAVE_HALFWAY and epoch % 45 == 0 and epoch > 0:
@@ -113,6 +114,7 @@ def fit(epochs, model, train_loader, val_loader, optimizer, training_mode, \
     if SAVE_MODEL and (not early_stopping_triggered):
         os.makedirs(model_path, exist_ok=True)
         torch.save(model.state_dict(), f'{model_path}/classification.pth')
+        TRAINED_EPOCH = epoch
     print(f'Trained model saved to {model_path}')
     writer.flush()
     writer.close()
@@ -237,6 +239,7 @@ if __name__ == "__main__":
     num_epochs = 150 # 150
     ML_DATA_TYPE = 'ML' # ML_smaller
     PATCH_SIZE = 64
+    TRAINED_EPOCH = 0
 
     parser = argparse.ArgumentParser(description="Training Configuration")
     parser.add_argument('--training_mode', type=str, choices=[
@@ -306,7 +309,7 @@ if __name__ == "__main__":
     if TEST_EVAL:
         print('\nTest evaluating...')
         test_dl = fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True)        
-        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
+        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl, args.training_mode)
         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
         target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
 
@@ -328,8 +331,8 @@ if __name__ == "__main__":
         print(f'jod rmse {jod_RMSE}')
         print(f'test result \n {result}\n')
 
-        # TODO: rename saved_model_path based on training type
         with open(f'{saved_model_path}/model.txt', 'a') as f:
+            f.write(f"Total epochs: {TRAINED_EPOCH}\n")
             f.write(f"Elapsed Time: {hours}h {minutes}m {seconds}s\n\n")
             f.write(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%\n")
             f.write(f'Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n')
