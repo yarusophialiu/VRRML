@@ -306,7 +306,7 @@ if __name__ == "__main__":
     if TEST_EVAL:
         print('\nTest evaluating...')
         test_dl = fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True)        
-        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
+        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl, args.training_mode)
         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
         target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
 
