@@ -18,6 +18,7 @@ from datetime import datetime
 
 # from VideoSinglePatchDataset_test import VideoSinglePatchDataset_test
 # from VideoSinglePatchDataset import VideoSinglePatchDataset
+from VideoMultiplePatchDataset import VideoMultiplePatchDataset
 from VideoDualPatchDataset import VideoDualPatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
@@ -43,8 +44,30 @@ def evaluate(model, val_loader):
     return model.validation_epoch_end(outputs) # get loss dictionary
 
 
+def process_test_outputs(result, fps_out, res_out):
+    _, fps_preds = torch.max(fps_out, dim=1)
+    _, res_preds = torch.max(res_out, dim=1)
+    res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
+    fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
+    res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
+    fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+    total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
+    framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+    jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+    jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+    
+    result['test_losses'].append(total_loss)
+    result['fps_acc'].append(framerate_accuracy)
+    result['res_acc'].append(resolution_accuracy)
+    result['both_acc'].append(both_correct_accuracy)
+    return result
+
+
 # from videoqualityclassifier_velocity.py
-def evaluate_test_data(model, test_loader):
+def evaluate_test_data(model, test_loader, training_mode):
+    fps = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+    resolution = [360, 480, 720, 864, 1080]
+
     model.eval()
     with torch.no_grad():  # Ensure gradients are not computed
         result = {'jod_loss': [], 'test_losses': [], 'res_acc': [], 'fps_acc': [], 'both_acc': [],}
@@ -65,7 +88,6 @@ def evaluate_test_data(model, test_loader):
             res_targets = batch["res_targets"]
             fps_targets = batch["fps_targets"]
             path = batch["path"]
-            # print(f'bitrate {bitrate.size()}')
 
             unique_indices = {}
             # Iterate over the tensor and populate the dictionary
@@ -73,50 +95,34 @@ def evaluate_test_data(model, test_loader):
                 if value not in unique_indices:
                     unique_indices[value] = index
 
-            res_out, fps_out = model(images, fps, bitrate, resolution, velocity)  # NaturalSceneClassification.forward
-            _, fps_preds = torch.max(fps_out, dim=1)
-            _, res_preds = torch.max(res_out, dim=1)
-            res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
-            fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
-            res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
-            fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
-            # print(f'fps_preds {fps_preds}')
-            # print(f'fps_targets {fps_targets}')
-            # res_out, fps_out = model(images, fps, bitrate, velocity)  # NaturalSceneClassification.forward
-            # print(f'training_step out {out.size()} \n {out.squeeze()}')
-            # print(f'labels out {labels}')
-            total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
-            framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
-            # print(f'jod_preds {jod_preds}')
-            jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
-            jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+            res_out, fps_out = model(images, fps, bitrate, resolution, velocity) 
+            result = process_test_outputs(result, fps_out, res_out)
+            # _, fps_preds = torch.max(fps_out, dim=1)
+            # _, res_preds = torch.max(res_out, dim=1)
+            # res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
+            # fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
+            # res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
+            # fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+            # total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
+            # framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+            # jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+            # jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
             
-            # result = {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
-            #     'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)} 
-            # print(f'result {result}')
-            result['test_losses'].append(total_loss)
-            result['fps_acc'].append(framerate_accuracy)
-            result['res_acc'].append(resolution_accuracy)
-            result['both_acc'].append(both_correct_accuracy)
-            # result['jod_loss'].append(jod_loss)
+            # result['test_losses'].append(total_loss)
+            # result['fps_acc'].append(framerate_accuracy)
+            # result['res_acc'].append(resolution_accuracy)
+            # result['both_acc'].append(both_correct_accuracy)
 
-            fps = [30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
-            resolution = [360, 480, 720, 864, 1080]
+            # fps_idx = torch.argmax(fps_out, dim=1) # fps_out is a probabiblity, of size eg. (8, 10)
+            # res_idx = torch.argmax(res_out, dim=1)
+            # # print(f'fps_idx {fps_idx}')
+            # fps_values = [fps[idx] for idx in fps_idx]
+            # res_values = [resolution[idx] for idx in res_idx]
+            # # print(f'fps_values {fps_values}')
+            # res_values = torch.tensor(res_values)
+            # fps_values = torch.tensor(fps_values)
 
-            fps_idx = torch.argmax(fps_out, dim=1) # fps_out is a probabiblity, of size eg. (8, 10)
-            res_idx = torch.argmax(res_out, dim=1)
-            # print(f'fps_idx {fps_idx}')
 
-            fps_values = [fps[idx] for idx in fps_idx]
-            res_values = [resolution[idx] for idx in res_idx]
-            # print(f'fps_values {fps_values}')
-            res_values = torch.tensor(res_values)
-            fps_values = torch.tensor(fps_values)
-
-            # return {'val_loss': total_loss.detach(), 'res_acc': resolution_accuracy, 'fps_acc': framerate_accuracy, \
-            #         'both_acc': both_correct_accuracy, 'jod_loss': round(jod_loss, 3)}, res_out, fps_out, res_targets, fps_targets, \
-            #             res_values, fps_values, unique_indices
-                # print(f'result {result}')
         epoch_test_losses = torch.stack(result['test_losses']).mean() # Combine accuracies
         epoch_res_acc = torch.stack(result['res_acc']).mean() # Combine accuracies
         epoch_fps_acc = torch.stack(result['fps_acc']).mean()
