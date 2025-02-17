@@ -9,6 +9,7 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data import random_split
 from torchvision.utils import make_grid
 from torch.utils.data import Dataset
+from EarlyStopping import EarlyStopping
 
 
 import torch.nn as nn
@@ -16,12 +17,16 @@ import torch.nn.functional as F
 from PIL import Image
 from datetime import datetime
 
-# from VideoSinglePatchDataset import
-from VideoDualPatchDataset import VideoDualPatchDataset
+from VideoSinglePatchDataset import VideoSinglePatchDataset
+# from VideoDualPatchDataset import VideoDualPatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
-from DecRefClassification_dual_smaller import *
+# from DecRefClassification_dual_smaller import *
+from DecRefClassification_smaller import *
 from torch.utils.tensorboard import SummaryWriter
+from datetime import datetime
+import time
+
 
 # regressin, learn the curves
 # https://docs.google.com/presentation/d/16yqaaq5zDZ5-S4394VLBUfxpNjM7nlpssqcShFkklec/edit#slide=id.g2c751bc0d9c_0_18
@@ -66,15 +71,20 @@ def evaluate(model, val_loader):
 def fit(epochs, model, train_loader, val_loader, optimizer, \
                 SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=False, CHECKPOINT=False):
     print(f'fit VELOCITY {VELOCITY}')
+    early_stopping = None
+
     history = []
     # optimizer = opt_func(model.parameters(),lr)
     model_path = ""
-    if SAVE_MODEL or SAVE_HALFWAY:
-        now = datetime.now()
-        dir_pth = now.strftime("%Y-%m-%d")
-        os.makedirs(dir_pth, exist_ok=True)
-        hrmin = now.strftime("%H_%M")
-        model_path = os.path.join(dir_pth, hrmin)
+    # if SAVE_MODEL or SAVE_HALFWAY:
+    now = datetime.now()
+    dir_pth = now.strftime("%Y-%m-%d")
+    os.makedirs(dir_pth, exist_ok=True)
+    hrmin = now.strftime("%H_%M")
+    model_path = os.path.join(dir_pth, hrmin)
+    early_stopping = EarlyStopping(patience=PATIENCE, delta=0.001, path=f"{model_path}")
+    early_stopping_triggered = False
+
 
     # an epoch is one pass through the entire dataset
     for epoch in epochs:
@@ -128,15 +138,23 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
 
         model.epoch_end(epoch, result)
         history.append(result)
+        # val_loss = result['val_loss']
+        # print(f'val loss {val_loss}')
+        early_stopping(result['val_loss'], model, epoch)
+        if early_stopping.early_stop:
+            print(f"Early stopping triggered. Training stopped at epoch {epoch}.")
+            early_stopping_triggered = True
+            break
 
         if SAVE_HALFWAY and epoch % 30 == 0 and epoch > 0:
             os.makedirs(model_path, exist_ok=True)
             print(f"Epoch {epoch} is a multiple of 10.")
             save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
         
-    if SAVE_MODEL:
+    if SAVE_MODEL and (not early_stopping_triggered):
         os.makedirs(model_path, exist_ok=True)
-        torch.save(model.state_dict(), f'{model_path}/classification.pth')
+        print(f'epoch = {epoch}')
+        torch.save(model.state_dict(), f'{model_path}/classification{epoch}.pth')
     print(f'model_path {model_path}')
     return history
 
@@ -145,14 +163,16 @@ def fit(epochs, model, train_loader, val_loader, optimizer, \
 # OLD from the last VRRML on desktop
 if __name__ == "__main__":
     SAVE_MODEL = True
-    SAVE_MODEL_HALF_WAY = True
+    SAVE_MODEL_HALF_WAY = False
     START_TRAINING= True # True False
     CHECKPOINT = False
+    CHECKPOINT_PATH = '2025-02-10/consecutive_patches_with_velocity/checkpoint60.pth'
     TEST_EVAL = False
     TEST_UNSEEN_SCENE = False # True
-    
+    PATIENCE = 10
+
     model_pth_path = ""
-    folder = 'ML/consecutive_patches64x64' # reference64x64 # TODO change model size reference128x128
+    folder = 'ML/reference64x64' # reference64x64 # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
         data_test_directory = f'{VRRML}/ML/test_scenes128x128' 
@@ -171,17 +191,18 @@ if __name__ == "__main__":
     batch_size = 128 # TODO
     patch_size = (64, 64) # TODO, change patch structure in DecRefClassification.py
 
-    FPS=True 
-    RESOLUTION=True
+    FPS=False 
+    RESOLUTION=False
     MODEL_VELOCITY=True
+    BATCHNORM=False # False
 
     num_framerates, num_resolutions = 10, 5
     VELOCITY = True
     VALIDATION = True
-    FRAMENUMBER = True # False True
+    FRAMENUMBER = False # False True reference64x64 doesnt have framenumber
 
-    dataset = VideoDualPatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, FRAMENUMBER=FRAMENUMBER) # len 27592
-    val_dataset = VideoDualPatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION, FRAMENUMBER=FRAMENUMBER) # len 27592
+    dataset = VideoSinglePatchDataset(directory=data_train_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, FRAMENUMBER=FRAMENUMBER) # len 27592
+    val_dataset = VideoSinglePatchDataset(directory=data_val_directory, min_bitrate=500, max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, VALIDATION=VALIDATION, FRAMENUMBER=FRAMENUMBER) # len 27592
     print(f'train_size {len(dataset)}, val_size {len(val_dataset)}, batch_size {batch_size}\n')
     print(f"Train dataset fps labels are: \n{dataset.fps_targets}\nTrain dataset res labels are: \n{dataset.res_targets}\n")
     print(f"Validation dataset fps labels are: \n{val_dataset.fps_targets}\nValidation dataset res labels are: \n{val_dataset.res_targets}\n")
@@ -204,15 +225,18 @@ if __name__ == "__main__":
         # Ensure deterministic behavior (may slow down training slightly)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        print("Time with seconds:", datetime.now().strftime("%H:%M:%S"))
+        start_time = time.time()  # Record start time
 
         # model = DecRefClassification(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-        model = DecRefClassification_dual(num_framerates, num_resolutions, \
-                                     FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
+        model = DecRefClassification(num_framerates, num_resolutions, \
+                                     FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY,\
+                                     BATCHNORM=BATCHNORM)
         optimizer = opt_func(model.parameters(),lr)
         epochs = range(num_epochs)
         if CHECKPOINT:
             # enable nn.AdaptiveAvgPool2d((1, 1)) if avg_pools
-            checkpoint = torch.load('2025-01-14/21_47/checkpoint150.pth')
+            checkpoint = torch.load(CHECKPOINT_PATH)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             epoch = checkpoint['epoch']
@@ -242,7 +266,13 @@ if __name__ == "__main__":
         # fitting the model on training data and record the result after each epoch
         history = fit(epochs, model, train_dl, val_dl, optimizer, SAVE_MODEL=SAVE_MODEL, \
                         SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY, CHECKPOINT=CHECKPOINT)
+        writer.flush()
         writer.close()
+        elapsed_time = time.time() - start_time  # Compute elapsed time
+        hours = int(elapsed_time // 3600)
+        minutes = int((elapsed_time % 3600) // 60)
+        seconds = int(elapsed_time % 60)
+        print(f"Elapsed Time: {hours}h {minutes}m {seconds}s")
 
 
     # if TEST_EVAL: # test data size 35756

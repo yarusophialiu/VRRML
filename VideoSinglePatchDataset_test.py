@@ -16,7 +16,7 @@ std_velocity = 3676701.584
 
 # dataset: handling batching, shuffling, and iterations over the dataset during training or inference
 # disable each parameter and test model performance 
-class VideoSinglePatchDataset(Dataset):
+class VideoSinglePatchDataset_test(Dataset):
     def __init__(self, directory, min_bitrate, max_bitrate, patch_size=((64, 64)), VELOCITY=False, VALIDATION=False):
         self.root_directory = directory
         self.patch_size = patch_size

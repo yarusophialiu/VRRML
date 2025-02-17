@@ -133,11 +133,11 @@ def load_checkpoint_from_path(path, model, optimizer):
     return model, epochs, optimizer
 
 def fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True):
-    data_folder = f'ML_smaller/{velocity_type}/train_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
+    data_folder = f'{ML_DATA_TYPE}/{velocity_type}/train_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
     if 'invariant_consecutive' in patch_type:
-        data_folder = f'ML_smaller/{velocity_type}/train_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
+        data_folder = f'{ML_DATA_TYPE}/{velocity_type}/train_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
     if 'invariant_random' in patch_type:
-        data_folder = f'ML_smaller/{velocity_type}/train_random_{PATCH_SIZE}x{PATCH_SIZE}' 
+        data_folder = f'{ML_DATA_TYPE}/{velocity_type}/train_random_{PATCH_SIZE}x{PATCH_SIZE}' 
 
     if patch_type == 'single':
         print(f'training_mode {args.training_mode} VideoSinglePatchDataset')
@@ -174,11 +174,11 @@ def fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=Tru
     return train_dl, val_dl
 
 def fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True):
-    data_test_folder = f'ML_smaller/{velocity_type}/test_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
+    data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_{patch_type}_{PATCH_SIZE}x{PATCH_SIZE}' 
     if 'invariant_consecutive' in patch_type:
-        data_test_folder = f'ML_smaller/{velocity_type}/test_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
     if 'invariant_random' in patch_type:
-        data_test_folder = f'ML_smaller/{velocity_type}/test_random_{PATCH_SIZE}x{PATCH_SIZE}' 
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_random_{PATCH_SIZE}x{PATCH_SIZE}' 
 
     if patch_type == 'single':
         print(f'training_mode {args.training_mode} VideoSinglePatchDataset')
@@ -234,7 +234,9 @@ if __name__ == "__main__":
     CHECKPOINT = False
     TEST_EVAL = True
     PATIENCE = 10 # early stopping
-    num_epochs = 1 # 150
+    num_epochs = 150 # 150
+    ML_DATA_TYPE = 'ML' # ML_smaller
+    PATCH_SIZE = 64
 
     parser = argparse.ArgumentParser(description="Training Configuration")
     parser.add_argument('--training_mode', type=str, choices=[
@@ -292,45 +294,45 @@ if __name__ == "__main__":
             model, epochs, optimizer = load_checkpoint_from_path(checkpoint_path, model, optimizer)
         model.to(device)
         train_dl, val_dl = fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=FRAMENUMBER)
-        # history, model, saved_model_path = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, SAVE_MODEL=SAVE_MODEL, \
-        #                                        SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=True, CHECKPOINT=CHECKPOINT)
-        # elapsed_time = time.time() - start_time  # Compute elapsed time
-        # hours = int(elapsed_time // 3600)
-        # minutes = int((elapsed_time % 3600) // 60)
-        # seconds = int(elapsed_time % 60)
-        # print(f"Elapsed Time: {hours}h {minutes}m {seconds}s")
+        history, model, saved_model_path = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, SAVE_MODEL=SAVE_MODEL, \
+                                               SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=True, CHECKPOINT=CHECKPOINT)
+        elapsed_time = time.time() - start_time  # Compute elapsed time
+        hours = int(elapsed_time // 3600)
+        minutes = int((elapsed_time % 3600) // 60)
+        seconds = int(elapsed_time % 60)
+        print(f"Elapsed Time: {hours}h {minutes}m {seconds}s")
 
 
     if TEST_EVAL:
         print('\nTest evaluating...')
         test_dl = fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True)        
-        # result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
-        # predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
-        # target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
+        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
+        predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
+        target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
 
-        # predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
-        # target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
-        # print(f'predicted_res {predicted_res}')
-        # print(f'target_res {target_res}')
+        predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
+        target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
+        print(f'predicted_res {predicted_res}')
+        print(f'target_res {target_res}')
 
-        # # Root Mean Square Error https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
-        # resolution_RMSE = compute_RMSE(predicted_res, target_res)
-        # fps_RMSE = compute_RMSE(predicted_fps, target_fps)
-        # jod_RMSE = compute_RMSE(jod_preds, jod_targets)
+        # Root Mean Square Error https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+        resolution_RMSE = compute_RMSE(predicted_res, target_res)
+        fps_RMSE = compute_RMSE(predicted_fps, target_fps)
+        jod_RMSE = compute_RMSE(jod_preds, jod_targets)
 
-        # # Root Mean Squared Percentage Error (RMSPE)
-        # resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
-        # fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
-        # print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
-        # print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
-        # print(f'jod rmse {jod_RMSE}')
-        # print(f'test result \n {result}\n')
+        # Root Mean Squared Percentage Error (RMSPE)
+        resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
+        fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
+        print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
+        print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
+        print(f'jod rmse {jod_RMSE}')
+        print(f'test result \n {result}\n')
 
-        # # TODO: rename saved_model_path based on training type
-        # with open(f'{saved_model_path}/model.txt', 'a') as f:
-        #     f.write(f"Elapsed Time: {hours}h {minutes}m {seconds}s\n\n")
-        #     f.write(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%\n")
-        #     f.write(f'Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n')
-        #     f.write(f'test result \n {result}\n\n')
-        #     f.write(f"{round(fps_RMSE, 1)} {round(fps_RMSEP)}%\n")
-        #     f.write(f'{round(resolution_RMSE, 1)} {round(resolution_RMSEP)}%\n')
+        # TODO: rename saved_model_path based on training type
+        with open(f'{saved_model_path}/model.txt', 'a') as f:
+            f.write(f"Elapsed Time: {hours}h {minutes}m {seconds}s\n\n")
+            f.write(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%\n")
+            f.write(f'Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n')
+            f.write(f'test result \n {result}\n\n')
+            f.write(f"{round(fps_RMSE, 1)} {round(fps_RMSEP)}%\n")
+            f.write(f'{round(resolution_RMSE, 1)} {round(resolution_RMSEP)}%\n')

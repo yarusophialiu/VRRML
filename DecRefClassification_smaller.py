@@ -2,14 +2,46 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from utils import *
-from ImageClassificationBase_old import * 
+from ImageClassificationBase_old import *
 
+def get_NN_with_BatchNorm(NUM_PATCHES=1):
+    nnSequentialWithBatchNorm = nn.Sequential(
+        nn.Conv2d(3 * NUM_PATCHES, 16 * NUM_PATCHES, kernel_size=3, padding=1),  # Reduce filters from 32 to 16
+        nn.BatchNorm2d(16 * NUM_PATCHES),  # Added BatchNorm, inputoutput same shape
+        nn.ReLU(), 
 
+        nn.Conv2d(16 * NUM_PATCHES, 32 * NUM_PATCHES, kernel_size=3, padding=1), 
+        nn.BatchNorm2d(32 * NUM_PATCHES),  # Added BatchNorm
+        nn.ReLU(), 
+        nn.MaxPool2d(2,2),  # Output: 64x64
 
-class DecRefClassification(ImageClassificationBase):
-    def __init__(self, num_framerates=10, num_resolutions=5, FPS=True, RESOLUTION=True, VELOCITY=True):
-        super().__init__()
-        self.network = nn.Sequential(
+        nn.Conv2d(32 * NUM_PATCHES, 64 * NUM_PATCHES, kernel_size=3, padding=1), 
+        nn.BatchNorm2d(64 * NUM_PATCHES),  # Added BatchNorm
+        nn.ReLU(),
+        nn.Conv2d(64 * NUM_PATCHES, 64 * NUM_PATCHES, kernel_size=3, padding=1), 
+        nn.BatchNorm2d(64 * NUM_PATCHES),  # Added BatchNorm
+        nn.ReLU(),  
+        nn.MaxPool2d(2,2),  # Output: 32x32
+
+        nn.Conv2d(64 * NUM_PATCHES, 128 * NUM_PATCHES, kernel_size=3, padding=1), 
+        nn.BatchNorm2d(128 * NUM_PATCHES),  # Added BatchNorm
+        nn.ReLU(),
+        nn.Conv2d(128 * NUM_PATCHES, 128 * NUM_PATCHES, kernel_size=3, padding=1), 
+        nn.BatchNorm2d(128 * NUM_PATCHES),  # Added BatchNorm
+        nn.ReLU(),
+        nn.MaxPool2d(2,2),  
+
+        nn.AdaptiveAvgPool2d((1, 1)),  # Global average pooling
+        nn.Flatten(),
+        # output vector of size 1024, 65536 = 256 * 16 * 16 for 128x128, 16384 for 64x64, 256 * 32 * 32 for 256x256
+        nn.Linear(128, 64),  # only 128 if adaptive avg pool enabled
+        nn.ReLU(),
+        nn.Linear(64, 32) # embedding of size 32
+    )
+    return nnSequentialWithBatchNorm
+
+def get_NN():
+    nnSequential = nn.Sequential(
             nn.Conv2d(3, 16, kernel_size=3, padding=1),  # Reduce filters from 32 to 16
             nn.ReLU(), 
             nn.Conv2d(16, 32, kernel_size=3, padding=1), 
@@ -37,15 +69,22 @@ class DecRefClassification(ImageClassificationBase):
             nn.ReLU(),
             nn.Linear(64, 32) # embedding of size 32
         )
+    return nnSequential
 
+
+
+
+class DecRefClassification(ImageClassificationBase):
+    def __init__(self, num_framerates=10, num_resolutions=5, FPS=True, RESOLUTION=True, VELOCITY=True, BATCHNORM=False):
+        super().__init__()
+        self.network = get_NN()
         self.fps = FPS
         self.resolution = RESOLUTION
         self.velocity = VELOCITY
         parameters = [FPS, RESOLUTION, VELOCITY]
         num_extra_features = sum(parameters) + 1
-        print(f'num_extra_features {num_extra_features}')
+        print(f'num_extra_features in training {num_extra_features}')
 
-        # num_extra_features = 3
         self.fc_network = nn.Sequential(
             nn.Linear(32+num_extra_features, 16),  # fps, bitrate, velocity
             nn.ReLU(),
