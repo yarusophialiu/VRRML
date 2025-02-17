@@ -17,13 +17,13 @@ from PIL import Image
 from datetime import datetime
 
 # from VideoSinglePatchDataset_test import VideoSinglePatchDataset_test
-# from VideoSinglePatchDataset import VideoSinglePatchDataset
 from VideoMultiplePatchDataset import VideoMultiplePatchDataset
 from VideoDualPatchDataset import VideoDualPatchDataset
+from VideoSinglePatchDataset import VideoSinglePatchDataset
 from DeviceDataLoader import DeviceDataLoader
 from utils import *
-# from DecRefClassification_smaller import *
-from DecRefClassification_dual_smaller import *
+from DecRefClassification_smaller import *
+# from DecRefClassification_dual_smaller import *
 from torch.utils.tensorboard import SummaryWriter
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     TEST_UNSEEN_SCENE = True # True False
     
     model_pth_path = ""
-    folder = 'ML/test_consecutive_patches64x64' # TODO change model size reference128x128
+    folder = 'ML/test_scenes64x64' # TODO change model size reference128x128
     if TEST_UNSEEN_SCENE:
         print(f'test on unseen scenes')
         data_test_directory = f'{VRRML}/ML/test_consecutive_patches64x64' # test_64x64 test_scenes64x64 test_scenes128x128
@@ -150,11 +150,12 @@ if __name__ == "__main__":
         data_test_directory = f'{VRRML}/{folder}/test' 
     
     if TEST_EVAL:
-        model_pth_path = f'2025-02-09/consecutive_patches_with_velocity/classification.pth' # models/smaller_model/classification.pth
+        model_pth_path = f'2025-02-11/no_fps/classification.pth' # models/smaller_model/classification.pth
 
-    MODEL_VELOCITY = True
     FPS = False # True False
-    RESOLUTION = False
+    RESOLUTION = True
+    MODEL_VELOCITY = True
+    BATCHNORM = False
 
     batch_size = 128 
     patch_size = (64, 64) # change patch structure in DecRefClassification_test.py
@@ -172,9 +173,9 @@ if __name__ == "__main__":
         torch.manual_seed(42)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-        test_dataset = VideoDualPatchDataset(directory=data_test_directory, min_bitrate=500, \
+        test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, \
                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, \
-                                                VALIDATION=VALIDATION, FRAMENUMBER=False) # len 27592
+                                                VALIDATION=VALIDATION, FRAMENUMBER=FRAMENUMBER) # len 27592
         print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
         sample = test_dataset[0]
         # print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
@@ -182,7 +183,8 @@ if __name__ == "__main__":
         # print(f'sample path is {sample["path"]}') if VELOCITY else None
         # model = DecRefClassification(num_framerates, num_resolutions, \
         #                              FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
-        model = DecRefClassification_dual(num_framerates, num_resolutions, VELOCITY=True)
+        model = DecRefClassification(num_framerates, num_resolutions, \
+                                          FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY, BATCHNORM=BATCHNORM)
         model.load_state_dict(torch.load(model_pth_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
