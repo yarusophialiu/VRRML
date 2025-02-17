@@ -44,23 +44,24 @@ def evaluate(model, val_loader):
     return model.validation_epoch_end(outputs) # get loss dictionary
 
 
-def process_test_outputs(result, fps_out, res_out, fps_targets, res_targets, bitrate, path):
-    _, fps_preds = torch.max(fps_out, dim=1)
-    _, res_preds = torch.max(res_out, dim=1)
-    res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
-    fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
-    res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
-    fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
-    total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
-    framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
-    jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
-    jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+# def process_test_outputs(result, fps_out, res_out, fps_targets, res_targets, \
+#                          fps_preds_all, res_preds_all, bitrate, path):
+#     _, fps_preds = torch.max(fps_out, dim=1)
+#     _, res_preds = torch.max(res_out, dim=1)
+#     res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
+#     fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
+#     res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
+#     fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+#     total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
+#     framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+#     jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+#     jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
     
-    result['test_losses'].append(total_loss)
-    result['fps_acc'].append(framerate_accuracy)
-    result['res_acc'].append(resolution_accuracy)
-    result['both_acc'].append(both_correct_accuracy)
-    return result
+#     result['test_losses'].append(total_loss)
+#     result['fps_acc'].append(framerate_accuracy)
+#     result['res_acc'].append(resolution_accuracy)
+#     result['both_acc'].append(both_correct_accuracy)
+#     return result, fps_preds_all, res_preds_all
 
 
 # from videoqualityclassifier_velocity.py
@@ -97,7 +98,21 @@ def evaluate_test_data(model, test_loader, training_mode):
                 #         unique_indices[value] = index
 
                 res_out, fps_out = model(images1, images2, fps, bitrate, resolution, velocity) 
-                result = process_test_outputs(result, fps_out, res_out, fps_targets, res_targets, bitrate, path)
+                _, fps_preds = torch.max(fps_out, dim=1)
+                _, res_preds = torch.max(res_out, dim=1)
+                res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
+                fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
+                res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
+                fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+                total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
+                framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+                jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+                jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+                
+                result['test_losses'].append(total_loss)
+                result['fps_acc'].append(framerate_accuracy)
+                result['res_acc'].append(resolution_accuracy)
+                result['both_acc'].append(both_correct_accuracy)
         else:
             for batch in test_loader:
                 images = batch["image"]
@@ -110,8 +125,22 @@ def evaluate_test_data(model, test_loader, training_mode):
                 path = batch["path"]
 
                 res_out, fps_out = model(images, fps, bitrate, resolution, velocity) 
-                result = process_test_outputs(result, fps_out, res_out, fps_targets, res_targets, bitrate, path)
-
+                # result = process_test_outputs(result, fps_out, res_out, fps_targets, res_targets, bitrate, path)
+                _, fps_preds = torch.max(fps_out, dim=1)
+                _, res_preds = torch.max(res_out, dim=1)
+                res_preds_all = res_preds if res_preds_all is None else torch.cat((res_preds_all, res_preds), dim=0)
+                fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
+                res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
+                fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+                total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
+                framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+                jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+                jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+    
+        result['test_losses'].append(total_loss)
+        result['fps_acc'].append(framerate_accuracy)
+        result['res_acc'].append(resolution_accuracy)
+        result['both_acc'].append(both_correct_accuracy)
             # fps_idx = torch.argmax(fps_out, dim=1) # fps_out is a probabiblity, of size eg. (8, 10)
             # res_idx = torch.argmax(res_out, dim=1)
             # # print(f'fps_idx {fps_idx}')
