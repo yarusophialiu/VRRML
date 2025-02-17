@@ -77,8 +77,8 @@ class DecRefClassification_multiple(MultiplemageClassificationBase):
             selected_tensors.append(velocity)
 
         extra_features = torch.stack(selected_tensors, dim=1).float()  # (B, num_extra_features)
-        print(f'images1, images2 {images1.size()} {images2.size()}')
-        print(f'extra_features {extra_features.size()}')
+        # print(f'images1, images2 {images1.size()} {images2.size()}')
+        # print(f'extra_features {extra_features.size()}')
 
         # Concatenate pooled embeddings with metadata
         combined = torch.cat((pooled_features, extra_features), dim=1)  # Shape: (B, 32 + num_extra_features)
