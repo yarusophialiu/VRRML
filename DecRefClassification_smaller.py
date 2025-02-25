@@ -67,7 +67,8 @@ def get_NN():
             # output vector of size 1024, 65536 = 256 * 16 * 16 for 128x128, 16384 for 64x64, 256 * 32 * 32 for 256x256
             nn.Linear(128, 64),  # only 128 if adaptive avg pool enabled
             nn.ReLU(),
-            nn.Linear(64, 32) # embedding of size 32
+            nn.Linear(64, 32), # embedding of size 32
+            nn.Sigmoid()  # Force output to [0,1]
         )
     return nnSequential
 
@@ -83,7 +84,7 @@ class DecRefClassification(ImageClassificationBase):
         self.velocity = VELOCITY
         parameters = [FPS, RESOLUTION, VELOCITY]
         num_extra_features = sum(parameters) + 1
-        print(f'num_extra_features in training {num_extra_features}')
+        # print(f'num_extra_features in training {num_extra_features}')
 
         self.fc_network = nn.Sequential(
             nn.Linear(32+num_extra_features, 16),  # fps, bitrate, velocity
@@ -96,6 +97,10 @@ class DecRefClassification(ImageClassificationBase):
     def forward(self, images, fps, bitrate, resolution, velocity): # velocity=0
         """images, fps, image_bitrate, resolution, velocity"""
         features = self.network(images)
+        # print(f'features \n {features}')
+        min_value = torch.min(features).item()
+        max_value = torch.max(features).item()
+        print("Min:", min_value, "Max:", max_value)
         selected_tensors = []
 
         if self.fps:
