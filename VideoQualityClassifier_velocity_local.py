@@ -38,7 +38,7 @@ def evaluate(model, val_loader):
     return model.validation_epoch_end(outputs) # get loss dictionary
 
 
-def fit(epochs, model, train_loader, val_loader, optimizer, training_mode, \
+def fit(epochs, model, train_loader, val_loader, optimizer, training_mode, total_epoch, \
                 SAVE_MODEL=False, SAVE_HALFWAY=False, VELOCITY=False, CHECKPOINT=False):
     history = []
     model_path = ""
@@ -103,22 +103,23 @@ def fit(epochs, model, train_loader, val_loader, optimizer, training_mode, \
         if early_stopping.early_stop:
             print(f"Early stopping triggered. Training stopped at epoch {epoch}.")
             early_stopping_triggered = True
-            TRAINED_EPOCH = epoch
+            total_epoch = epoch
             break
 
-        if SAVE_HALFWAY and epoch % 45 == 0 and epoch > 0:
+        if SAVE_HALFWAY and epoch % 90 == 0 and epoch > 0:
             os.makedirs(model_path, exist_ok=True)
             print(f"Epoch {epoch} is a multiple of 10.")
             save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
     
     if SAVE_MODEL and (not early_stopping_triggered):
         os.makedirs(model_path, exist_ok=True)
+        save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
         torch.save(model.state_dict(), f'{model_path}/classification.pth')
-        TRAINED_EPOCH = epoch
+        total_epoch = epoch
     print(f'Trained model saved to {model_path}')
     writer.flush()
     writer.close()
-    return history, model, model_path
+    return history, model, model_path, total_epoch
 
 def load_checkpoint_from_path(path, model, optimizer):
     checkpoint = torch.load(path)
@@ -232,18 +233,18 @@ def set_manual_seed():
 if __name__ == "__main__":
     SAVE_MODEL = True
     SAVE_MODEL_HALF_WAY = True
-    START_TRAINING= True # True False
-    CHECKPOINT = False
+    START_TRAINING = True # True False
+    CHECKPOINT = True
     TEST_EVAL = True
     PATIENCE = 10 # early stopping
-    num_epochs = 150 # 150
+    num_epochs = 180 # 150
     ML_DATA_TYPE = 'ML' # ML_smaller
     PATCH_SIZE = 64
     TRAINED_EPOCH = 0
 
     parser = argparse.ArgumentParser(description="Training Configuration")
     parser.add_argument('--training_mode', type=str, choices=[
-                        'no_fps', 'no_res', 'no_fps_no_resolution', 'no_velocity', 
+                        'no_fps', 'no_res', 'no_fps_no_resolution', 'no_velocity', 'no_fps_no_resolution_no_velocity',
                         'consecutive_patch', 'consecutive_patch_no_velocity', 'random_patch', 
                         'full', 'invariant_consecutive', 'invariant_random', 
                         'invariant_consecutive_no_velocity', 'invariant_random_no_velocity'
@@ -255,6 +256,7 @@ if __name__ == "__main__":
         'no_res': {'FPS': True, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'no_fps_no_resolution': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'single'},
+        'no_fps_no_resolution_no_velocity': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': False, 'patch_type': 'single'},
         'full': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
         'consecutive_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
         'consecutive_patch_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
@@ -274,14 +276,14 @@ if __name__ == "__main__":
 
     velocity_type = 'frame-velocity' # frame-velocity patch-velocity
     PATCH_SIZE = 64
-    checkpoint_path = ''
+    checkpoint_path = '2025-03-02/no_fps_no_resolution_no_velocity_20_43/checkpoint90.pth'
 
     lr = 0.0003
     opt_func = torch.optim.Adam # torch.optim.SGD not work
     batch_size = 128 
     patch_size = (PATCH_SIZE, PATCH_SIZE) 
 
-    FRAMENUMBER = True # True
+    FRAMENUMBER = True if velocity_type == 'frame-velocity' else False # True
 
     device = get_default_device()
     saved_model_path = None
@@ -295,20 +297,24 @@ if __name__ == "__main__":
         epochs = range(num_epochs)
         if CHECKPOINT:
             model, epochs, optimizer = load_checkpoint_from_path(checkpoint_path, model, optimizer)
+            print(f'Training from checkpoint, epochs {epochs}')
         model.to(device)
         train_dl, val_dl = fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=FRAMENUMBER)
-        history, model, saved_model_path = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, SAVE_MODEL=SAVE_MODEL, \
+        history, model, saved_model_path, TRAINED_EPOCH = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, TRAINED_EPOCH, SAVE_MODEL=SAVE_MODEL, \
                                                SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=True, CHECKPOINT=CHECKPOINT)
         elapsed_time = time.time() - start_time  # Compute elapsed time
         hours = int(elapsed_time // 3600)
         minutes = int((elapsed_time % 3600) // 60)
         seconds = int(elapsed_time % 60)
         print(f"Elapsed Time: {hours}h {minutes}m {seconds}s")
+        print(f'TRAINED_EPOCH {TRAINED_EPOCH}')
 
 
     if TEST_EVAL:
         print('\nTest evaluating...')
-        test_dl = fetch_test_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=True)        
+        # if velocity_type == 'patch-velocity':
+        TEST_FRAMENUMBER = True
+        test_dl = fetch_test_dataloader(batch_size * 20, patch_size, device, patch_type, FRAMENUMBER=TEST_FRAMENUMBER)        
         result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl, args.training_mode)
         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
         target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
@@ -331,8 +337,12 @@ if __name__ == "__main__":
         print(f'jod rmse {jod_RMSE}')
         print(f'test result \n {result}\n')
 
+        # num_parameters = count_parameters(model_pth, model)
+        num_parameters = sum(p.numel() for p in model.parameters())
+        print(f"\nTotal number of parameters in the model: {num_parameters}")
         with open(f'{saved_model_path}/model.txt', 'a') as f:
             f.write(f"Total epochs: {TRAINED_EPOCH}\n")
+            f.write(f"Total number of parameters in the model: {num_parameters}\n")
             f.write(f"Elapsed Time: {hours}h {minutes}m {seconds}s\n\n")
             f.write(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%\n")
             f.write(f'Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n')

@@ -1,7 +1,16 @@
 import os 
 import torch
-import torchvision
 import numpy as np
+def set_manual_seed():
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42) # Ensure CUDA also uses the same seed
+    torch.cuda.manual_seed_all(42)  # If using multi-GPU
+    np.random.seed(42) # Ensure reproducibility with NumPy and Python's random
+    torch.backends.cudnn.deterministic = True # Ensure deterministic behavior (may slow down training slightly)
+    torch.backends.cudnn.benchmark = False
+ 
+
+import torchvision
 import matplotlib.pyplot as plt
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
@@ -62,6 +71,48 @@ def evaluate(model, val_loader):
 #     result['res_acc'].append(resolution_accuracy)
 #     result['both_acc'].append(both_correct_accuracy)
 #     return result, fps_preds_all, res_preds_all
+def get_test_dataloader(ML_DATA_TYPE, batch_size, patch_size, device, parent_dir, FRAMENUMBER=True):
+    velocity_type = 'frame-velocity'
+    PATCH_SIZE = 64
+    if 'invariant_consecutive' in parent_dir:
+        print(f'parent_dir {parent_dir} VideoMultiplePatchDataset')
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
+        test_dataset = VideoMultiplePatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
+                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER) 
+    elif 'invariant_random' in parent_dir:
+        print(f'parent_dir {parent_dir} VideoMultiplePatchDataset')
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_random_{PATCH_SIZE}x{PATCH_SIZE}' 
+        test_dataset = VideoMultiplePatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
+                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+    elif 'random' in parent_dir:
+        print(f'parent_dir {parent_dir} VideoDualPatchDataset')
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_random_{PATCH_SIZE}x{PATCH_SIZE}' 
+        test_dataset = VideoDualPatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
+                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+    elif 'consecutive' in parent_dir:
+        print(f'parent_dir {parent_dir} VideoDualPatchDataset')
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_consecutive_{PATCH_SIZE}x{PATCH_SIZE}' 
+        test_dataset = VideoDualPatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
+                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+    else:
+        print(f'parent_dir {parent_dir} VideoSinglePatchDataset')
+        data_test_folder = f'{ML_DATA_TYPE}/{velocity_type}/test_single_{PATCH_SIZE}x{PATCH_SIZE}' 
+        test_dataset = VideoSinglePatchDataset(directory=f'{VRRML}/{data_test_folder}', min_bitrate=500, \
+                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=True, \
+                                                VALIDATION=True, FRAMENUMBER=FRAMENUMBER)
+    print(f'\nTest data size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}')
+    print(f'data_test_folder {data_test_folder}\n')
+    sample = test_dataset[0]
+    print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
+    print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
+    print(f'sample path is {sample["path"]}') if VELOCITY else None
+    test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
+    test_dl = DeviceDataLoader(test_dl, device) 
+    return test_dl
 
 
 # from videoqualityclassifier_velocity.py
@@ -78,6 +129,9 @@ def evaluate_test_data(model, test_loader, training_mode):
         res_targets_all = None
         fps_targets_all = None
         jod_targets_all = None
+        bitrate_all = []
+        # path_all = None
+        path_all = []
 
         if 'invariant' in training_mode:
             for batch in test_loader:
@@ -117,14 +171,18 @@ def evaluate_test_data(model, test_loader, training_mode):
             for batch in test_loader:
                 images = batch["image"]
                 fps = batch["fps"]
-                bitrate = batch["bitrate"]
+                bitrate = batch["bitrate"] # tensor
                 resolution = batch["resolution"]
                 velocity = batch["velocity"]
                 res_targets = batch["res_targets"]
                 fps_targets = batch["fps_targets"]
-                path = batch["path"]
+                path = batch["path"] # list
+                bitrate_all.extend(bitrate.tolist())
+                path_all.extend(path)
+                # path_all = path if path_all is None else torch.cat((path_all, path), dim=0)
 
                 res_out, fps_out = model(images, fps, bitrate, resolution, velocity) 
+                # print(f'fps_out {fps_out.shape}, res_out {res_out.shape}')
                 # result = process_test_outputs(result, fps_out, res_out, fps_targets, res_targets, bitrate, path)
                 _, fps_preds = torch.max(fps_out, dim=1)
                 _, res_preds = torch.max(res_out, dim=1)
@@ -132,158 +190,102 @@ def evaluate_test_data(model, test_loader, training_mode):
                 fps_preds_all = fps_preds if fps_preds_all is None else torch.cat((fps_preds_all, fps_preds), dim=0)
                 res_targets_all = res_targets if res_targets_all is None else torch.cat((res_targets_all, res_targets), dim=0)
                 fps_targets_all = fps_targets if fps_targets_all is None else torch.cat((fps_targets_all, fps_targets), dim=0)
+                
                 total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
-                framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
-                jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
-                jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
-    
+
+        framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds_all, jod_targets_all = compute_accuracy(fps_preds_all, res_preds_all, fps_targets_all, res_targets_all, bitrate_all, path_all)
+        # jod_preds_all = jod_preds if jod_preds_all is None else torch.cat((jod_preds_all, jod_preds), dim=0)
+        # jod_targets_all = jod_targets if jod_targets_all is None else torch.cat((jod_targets_all, jod_targets), dim=0)
+
         result['test_losses'].append(total_loss)
-        result['fps_acc'].append(framerate_accuracy)
-        result['res_acc'].append(resolution_accuracy)
-        result['both_acc'].append(both_correct_accuracy)
-            # fps_idx = torch.argmax(fps_out, dim=1) # fps_out is a probabiblity, of size eg. (8, 10)
-            # res_idx = torch.argmax(res_out, dim=1)
-            # # print(f'fps_idx {fps_idx}')
-            # fps_values = [fps[idx] for idx in fps_idx]
-            # res_values = [resolution[idx] for idx in res_idx]
-            # # print(f'fps_values {fps_values}')
-            # res_values = torch.tensor(res_values)
-            # fps_values = torch.tensor(fps_values)
-
-
         epoch_test_losses = torch.stack(result['test_losses']).mean() # Combine accuracies
-        epoch_res_acc = torch.stack(result['res_acc']).mean() # Combine accuracies
-        epoch_fps_acc = torch.stack(result['fps_acc']).mean()
-        epoch_both_acc = torch.stack(result['both_acc']).mean()
-        # epoch_jod_loss = sum(result['jod_loss']) / len(result['jod_loss'])
-        # print(f'batch_jod_loss {batch_jod_loss}')
-        return {'test_losses': epoch_test_losses.item(), 'res_acc': epoch_res_acc.item(), \
-                'fps_acc': epoch_fps_acc.item(), 'both_acc': epoch_both_acc.item(),}, \
-                res_preds_all, fps_preds_all, res_targets_all, fps_targets_all, jod_preds_all, jod_targets_all \
+
+        # # epoch_jod_loss = sum(result['jod_loss']) / len(result['jod_loss'])
+        # # print(f'batch_jod_loss {batch_jod_loss}')
+        return {
+            'test_losses': round(epoch_test_losses.item(), 4), 
+            'res_acc': round(resolution_accuracy.item(), 4), 
+            'fps_acc': round(framerate_accuracy.item(), 4), 
+            'both_acc': round(both_correct_accuracy.item(), 4)
+        }, res_preds_all, fps_preds_all, res_targets_all, fps_targets_all, jod_preds_all, jod_targets_all
                 # res_values, fps_values, unique_indices
 
 
-# # disable each parameter and test model performance 
-# # change model(images, fps, bitrate, velocity) in evaluate_test_data based on the used model
-# if __name__ == "__main__":
-#     TEST_EVAL = True
-#     TEST_UNSEEN_SCENE = True # True False
+# disable each parameter and test model performance 
+# change model(images, fps, bitrate, velocity) in evaluate_test_data based on the used model
+if __name__ == "__main__":
+    TEST_EVAL = True
     
-#     model_pth_path = ""
-#     folder = 'ML/test_scenes64x64' # TODO change model size reference128x128
-#     if TEST_UNSEEN_SCENE:
-#         print(f'test on unseen scenes')
-#         data_test_directory = f'{VRRML}/ML/test_consecutive_patches64x64' # test_64x64 test_scenes64x64 test_scenes128x128
-#     else:
-#         data_test_directory = f'{VRRML}/{folder}/test' 
-    
-#     if TEST_EVAL:
-#         model_pth_path = f'2025-02-11/no_fps/classification.pth' # models/smaller_model/classification.pth
+    ML_DATA_TYPE = 'ML'
+    data_test_directory = f'{VRRML}/{ML_DATA_TYPE}/frame-velocity/test_single_64x64' 
+    model_parent_folder = 'no_fps_no_resolution_no_velocity_20_43' # -frame-dropjod-sigmoid
+    model_pth_path = f'2025-03-02/{model_parent_folder}/classification.pth' 
 
-#     FPS = False # True False
-#     RESOLUTION = True
-#     MODEL_VELOCITY = True
-#     BATCHNORM = False
+    training_mode = 'no_fps_no_resolution_no_velocity'
+    FPS = False # True False
+    RESOLUTION = False
+    MODEL_VELOCITY = False
+    batch_size = 128 * 20
+    patch_size = (64, 64)
 
-#     batch_size = 128 
-#     patch_size = (64, 64) # change patch structure in DecRefClassification_test.py
+    num_framerates, num_resolutions = 10, 5
+    VALIDATION = True
+    VELOCITY = True
+    CHECKPOINT = True
+    FRAMENUMBER = True # False True
 
-#     num_framerates, num_resolutions = 10, 5
-#     VALIDATION = True
-#     VELOCITY = True
-#     CHECKPOINT = False
-#     FRAMENUMBER = True # False True
+    device = get_default_device()
 
-#     device = get_default_device()
-#     cuda  = device.type == 'cuda'
+    if TEST_EVAL: # test data size 35756
+        set_manual_seed()
+        model = DecRefClassification(num_framerates, num_resolutions, \
+                                          FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
+        model.load_state_dict(torch.load(model_pth_path))
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
+        test_dl = get_test_dataloader(ML_DATA_TYPE, 128, patch_size, device, model_parent_folder, FRAMENUMBER=True)
 
-#     if TEST_EVAL: # test data size 35756
-#         torch.manual_seed(42)
-#         torch.backends.cudnn.deterministic = True
-#         torch.backends.cudnn.benchmark = False
-#         test_dataset = VideoSinglePatchDataset(directory=data_test_directory, min_bitrate=500, \
-#                                                max_bitrate=2000, patch_size=patch_size, VELOCITY=VELOCITY, \
-#                                                 VALIDATION=VALIDATION, FRAMENUMBER=FRAMENUMBER) # len 27592
-#         print(f'\ntest_size {len(test_dataset)}, patch_size {patch_size}, batch_size {batch_size}\n')
-#         sample = test_dataset[0]
-#         # print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
-#         # print(f'sample velocity is {sample["velocity"]}') if VELOCITY else None
-#         # print(f'sample path is {sample["path"]}') if VELOCITY else None
-#         # model = DecRefClassification(num_framerates, num_resolutions, \
-#         #                              FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY)
-#         model = DecRefClassification(num_framerates, num_resolutions, \
-#                                           FPS=FPS, RESOLUTION=RESOLUTION, VELOCITY=MODEL_VELOCITY, BATCHNORM=BATCHNORM)
-#         model.load_state_dict(torch.load(model_pth_path))
-#         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#         test_dl = DataLoader(test_dataset, batch_size*2, shuffle = False, num_workers = 4, pin_memory = True)
+        if device.type == 'cuda':
+            print(f'Loading data to cuda...')
+            test_dl = DeviceDataLoader(test_dl, device)
+            to_device(model, device)
 
-#         if device.type == 'cuda':
-#             print(f'Loading data to cuda...')
-#             test_dl = DeviceDataLoader(test_dl, device)
-#             to_device(model, device)
+        print(f'model_path {model_pth_path}')
+        result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl, training_mode)
+        predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
+        target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
 
-#         print(f'model_path {model_pth_path}')
-#         print(f'TEST_UNSEEN_SCENE {TEST_UNSEEN_SCENE}')
-#         result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl)
-#         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
-#         target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
+        predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
+        target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
+        print(f'predicted_res {predicted_res}')
+        print(f'target_res {target_res}')
+        print(f'predicted_fps {predicted_fps}')
+        print(f'target_fps {target_fps}')
 
-#         predicted_res = torch.tensor([reverse_res_map[int(pred)] for pred in res_preds])
-#         target_res = torch.tensor([reverse_res_map[int(target)] for target in res_targets])
-#         print(f'predicted_res {predicted_res}')
-#         print(f'target_res {target_res}')
-
-#         # Root Mean Square Error
-#         # https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
-#         resolution_RMSE = compute_RMSE(predicted_res, target_res)
-#         fps_RMSE = compute_RMSE(predicted_fps, target_fps)
-#         jod_RMSE = compute_RMSE(jod_preds, jod_targets)
-
-#         # Root Mean Squared Percentage Error (RMSPE)
-#         resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
-#         fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
-#         # resolution_RMSEP = geometric_mean_relative_error(predicted_res, target_res, "resolution") # compute_RMSEP(predicted_res, target_res)
-#         # fps_RMSEP = geometric_mean_relative_error(predicted_fps, target_fps, "fps") # compute_RMSEP(predicted_fps, target_fps)
-#         print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
-#         print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
-#         print(f'jod rmse {jod_RMSE}')
-#         print(f'test result \n {result}\n')
+        # inference_output_dir = 'inference_outputs'
+        # with open(f"{inference_output_dir}/predicted_res_{training_mode}.py", "w") as f:
+        #     f.write(f"predicted_res = {predicted_res.tolist()}\n")
+        # with open(f"{inference_output_dir}/target_res_{training_mode}.py", "w") as f:
+        #     f.write(f"target_res = {target_res.tolist()}\n")
+        # with open(f"{inference_output_dir}/predicted_fps_{training_mode}.py", "w") as f:
+        #     f.write(f"predicted_fps = {predicted_fps.tolist()}\n")
+        # with open(f"{inference_output_dir}/target_fps_{training_mode}.py", "w") as f:
+        #     f.write(f"target_fps = {target_fps.tolist()}\n")
 
 
-#     # SAVE_MODEL = True
-#     # SAVE_MODEL_HALF_WAY = True
-#     # START_TRAINING= False # True False
-#     # data_train_directory = f'{VRRML}/{folder}/train' # ML_smaller
-#     # data_val_directory = f'{VRRML}/{folder}/validation' 
-#     # if START_TRAINING:
-#         # num_epochs = 16
-#         # lr = 0.0003
-#         # opt_func = torch.optim.Adam
-#     #     model = DecRefClassification_test(num_framerates, num_resolutions, VELOCITY=VELOCITY)
-#     #     optimizer = opt_func(model.parameters(),lr)
-#     #     epochs = range(num_epochs)
-#     #     if CHECKPOINT:
-#     #         checkpoint = torch.load('2024-09-26/15_19/checkpoint10.pth')
-#     #         model.load_state_dict(checkpoint['model_state_dict'])
-#     #         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-#     #         # epoch = checkpoint['epoch']
-#     #         epoch = 10
-#     #         epochs = range(epoch+1, num_epochs)
-#     #         for state in optimizer.state.values():
-#     #             for k, v in state.items():
-#     #                 if isinstance(v, torch.Tensor):
-#     #                     state[k] = v.to(device)
-#     #     print(f'epochs {epochs}')
-#     #     train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
-#     #     val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
-#     #     if device.type == 'cuda':
-#     #         print(f'Loading data to cuda...')
-#     #         train_dl = DeviceDataLoader(train_dl, device)
-#     #         val_dl = DeviceDataLoader(val_dl, device)
-#     #         to_device(model, device)
+        # # Root Mean Square Error
+        # # https://help.pecan.ai/en/articles/6456388-model-performance-metrics-for-regression-models
+        resolution_RMSE = compute_RMSE(predicted_res, target_res)
+        fps_RMSE = compute_RMSE(predicted_fps, target_fps)
+        # jod_RMSE = compute_RMSE(jod_preds, jod_targets)
 
-#     #     writer = SummaryWriter('runs/test_param')
-#     #     # fitting the model on training data and record the result after each epoch
-#     #     history = fit(epochs, model, train_dl, val_dl, optimizer, SAVE_MODEL=SAVE_MODEL, \
-#     #                     SAVE_HALFWAY=SAVE_MODEL_HALF_WAY, VELOCITY=VELOCITY, CHECKPOINT=CHECKPOINT)
-#     #     writer.close()
+        # Root Mean Squared Percentage Error (RMSPE)
+        resolution_RMSEP = relative_error_metric(predicted_res, target_res) 
+        fps_RMSEP = relative_error_metric(predicted_fps, target_fps) 
+        # resolution_RMSEP = geometric_mean_relative_error(predicted_res, target_res, "resolution") # compute_RMSEP(predicted_res, target_res)
+        # fps_RMSEP = geometric_mean_relative_error(predicted_fps, target_fps, "fps") # compute_RMSEP(predicted_fps, target_fps)
+        print(f"FPS: Root Mean Squared Error {fps_RMSE}, Root Mean Squared Percentage Error (RMSPE): {fps_RMSEP}%")
+        print(f"Resolution: Root Mean Squared Error {resolution_RMSE}, Root Mean Squared Percentage Error (RMSPE): {resolution_RMSEP}%\n")
+        # print(f'jod rmse {jod_RMSE}')
+        print(f'test result \n {result}\n')
+

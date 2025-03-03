@@ -12,8 +12,8 @@ from utils import *
 
 fps_map = {30: 0, 40: 1, 50: 2, 60: 3, 70: 4, 80: 5, 90: 6, 100: 7, 110: 8, 120: 9}
 res_map = {360: 0, 480: 1, 720: 2, 864: 3, 1080: 4}
-mean_velocity = 341011.652
-std_velocity = 3676701.584
+# mean_velocity = 341011.652
+# std_velocity = 3676701.584
 
 # dataset: handling batching, shuffling, and iterations over the dataset during training or inference
 class VideoSinglePatchDataset(Dataset):
@@ -31,6 +31,8 @@ class VideoSinglePatchDataset(Dataset):
         self.max_fps = 120
         self.min_res = 360
         self.max_res = 1080
+        self.max_velocity = 0.31414 # 1.79153
+        self.min_velocity = 7e-05
 
         self.min_bitrate = min_bitrate
         self.max_bitrate = max_bitrate
@@ -84,7 +86,7 @@ class VideoSinglePatchDataset(Dataset):
             bitrate = int(parts[-1].split('.')[0])  # Remove .png and convert to integer
         else:
             bitrate = int(parts[3])  
-            velocity = int(parts[-1].split('.')[0]) / 1000  # Remove .png and convert to integer
+            velocity = int(parts[-1].split('.')[0]) / 1e5  # Remove .png and convert to integer
         
         if self.framenumber:
             framenumber = int(parts[4])
@@ -93,7 +95,8 @@ class VideoSinglePatchDataset(Dataset):
         fps = self.normalize(fps, self.min_fps, self.max_fps)
         pixel = self.normalize(pixel, self.min_res, self.max_res)
         bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
-        velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
+        velocity = self.normalize(velocity, self.min_velocity, self.max_velocity)
+        # velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
         framenumber = self.normalize(framenumber, 0, 276) if self.framenumber else -1
 
 
@@ -105,13 +108,12 @@ class VideoSinglePatchDataset(Dataset):
         if self.transform:
             image = self.transform(image)
             # print(f'image.size {image.size()}')
-            # print(f'image {image}')
             # pil_image = to_pil_image(image)
             # pil_image.show()
          
         sample = {"image": image, "fps": fps, "bitrate": bitrate, "resolution": pixel, \
                   "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], \
-                  'velocity': velocity, 'framenumber': framenumber}
+                  'velocity': velocity} # 'framenumber': framenumber
         
         # # print(f'self.velocity {self.velocity}')
         # if self.framenumber and self.validation:
