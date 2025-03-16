@@ -84,7 +84,7 @@ class DecRefClassification(ImageClassificationBase):
         self.velocity = VELOCITY
         parameters = [FPS, RESOLUTION, VELOCITY]
         num_extra_features = sum(parameters) + 1
-        print(f'num_extra_features in training {num_extra_features}')
+        # print(f'num_extra_features in training {num_extra_features}')
 
         self.fc_network = nn.Sequential(
             nn.Linear(32+num_extra_features, 16),  # fps, bitrate, velocity
@@ -100,6 +100,10 @@ class DecRefClassification(ImageClassificationBase):
     def forward(self, images, fps, bitrate, resolution, velocity): # velocity=0
         """images, fps, image_bitrate, resolution, velocity"""
         features = self.network(images)
+        # print(f'features \n {features}')
+        min_value = torch.min(features).item()
+        max_value = torch.max(features).item()
+        print("Min:", min_value, "Max:", max_value)
         selected_tensors = []
 
         if self.fps:
