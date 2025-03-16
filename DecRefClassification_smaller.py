@@ -67,7 +67,8 @@ def get_NN():
             # output vector of size 1024, 65536 = 256 * 16 * 16 for 128x128, 16384 for 64x64, 256 * 32 * 32 for 256x256
             nn.Linear(128, 64),  # only 128 if adaptive avg pool enabled
             nn.ReLU(),
-            nn.Linear(64, 32) # embedding of size 32
+            nn.Linear(64, 32), # embedding of size 32
+            nn.Sigmoid()  # Force output to [0,1]
         )
     return nnSequential
 
@@ -91,6 +92,9 @@ class DecRefClassification(ImageClassificationBase):
         )
         self.fc_res = nn.Linear(16, num_resolutions)
         self.fc_fps = nn.Linear(16, num_framerates)
+        # Final linear layer (no activation) → produces raw, unbounded logits.
+        # CrossEntropyLoss internally applies log‐softmax (or uses the logits directly), 
+        # then computes the cross entropy with the integer class labels.
 
     
     def forward(self, images, fps, bitrate, resolution, velocity): # velocity=0
