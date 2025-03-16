@@ -30,6 +30,9 @@ def get_NN_with_BatchNorm(NUM_PATCHES):
         nn.BatchNorm2d(128 * NUM_PATCHES),  # Added BatchNorm
         nn.ReLU(),
         nn.MaxPool2d(2,2)  
+
+        # nn.Linear(64, 32), # embedding of size 32
+        # nn.Sigmoid()  # Force output to [0,1]
     )
     return nnSequentialWithBatchNorm
 
@@ -64,7 +67,8 @@ class DecRefClassification_dual(ImageClassificationBase):
             nn.ReLU(),
             nn.Linear(64 * NUM_PATCHES, 64),  # only 128 if adaptive avg pool enabled
             nn.ReLU(),
-            nn.Linear(64, 32) # embedding of size 32
+            nn.Linear(64, 32), # embedding of size 32
+            nn.Sigmoid()  # Force output to [0,1]
         )
 
         self.fps = FPS

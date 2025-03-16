@@ -63,6 +63,7 @@ class VideoSinglePatchDataset(Dataset):
     def normalize(self, sample, min_vals, max_vals):
         # print(f'val, min_vals, max_vals {sample, min_vals, max_vals}')
         sample = (sample - min_vals) / (max_vals - min_vals)
+        sample = np.clip(sample, 0, 1)
         return round(sample, 3)
     
 

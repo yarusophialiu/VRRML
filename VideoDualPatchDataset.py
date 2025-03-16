@@ -54,6 +54,8 @@ class VideoDualPatchDataset(Dataset):
         self.max_fps = 120
         self.min_res = 360
         self.max_res = 1080
+        self.max_velocity = 0.31414 # 1.79153
+        self.min_velocity = 7e-05
 
         self.min_bitrate = min_bitrate
         self.max_bitrate = max_bitrate
@@ -76,6 +78,7 @@ class VideoDualPatchDataset(Dataset):
     def normalize(self, sample, min_vals, max_vals):
         # print(f'val, min_vals, max_vals {sample, min_vals, max_vals}')
         sample = (sample - min_vals) / (max_vals - min_vals)
+        sample = np.clip(sample, 0, 1)
         return round(sample, 3)
     
 
@@ -100,7 +103,7 @@ class VideoDualPatchDataset(Dataset):
             bitrate = int(parts[-1].split('.')[0])  # Remove .png and convert to integer
         else:
             bitrate = int(parts[3])  
-            velocity = int(parts[-1].split('.')[0]) / 1000  # Remove .png and convert to integer
+            velocity = int(parts[-1].split('.')[0]) / 1e5  # Remove .png and convert to integer
         
         if self.framenumber:
             framenumber = int(parts[4])
@@ -109,8 +112,8 @@ class VideoDualPatchDataset(Dataset):
         fps = self.normalize(fps, self.min_fps, self.max_fps)
         pixel = self.normalize(pixel, self.min_res, self.max_res)
         bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
-        # TODO: normalize velocity
-        velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
+        # velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
+        velocity = self.normalize(velocity, self.min_velocity, self.max_velocity)
         framenumber = self.normalize(framenumber, 0, 276) if self.framenumber else -1
 
 
@@ -128,7 +131,7 @@ class VideoDualPatchDataset(Dataset):
          
         sample = {"image": image, "fps": fps, "bitrate": bitrate, "resolution": pixel, \
                   "fps_targets": fps_map[fps_targets], "res_targets": res_map[res_targets], \
-                  'velocity': velocity, 'framenumber': framenumber}
+                  'velocity': velocity,} # 'framenumber': framenumber
         
         # # print(f'self.velocity {self.velocity}')
         # if self.framenumber and self.validation:

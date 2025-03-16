@@ -22,19 +22,20 @@ from JOD import *
 import onnx
 from ignite.engine import *
 from ignite.metrics import *
+from collections import Counter
+import pandas as pd
 
 
 
-
-# # local pc
-# CVVDPDIR = 'C:/Users/15142/Projects/ColorVideoVDP'
-# VRRMP4_CVVDP = r'C:\Users\15142\Projects\VRR\VRRMP4_CVVDP'
-# VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
-# VRR_Patches = f'{VRRDATA}/VRR_Patches'
-# VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
+# local pc
+CVVDPDIR = 'C:/Users/15142/Projects/ColorVideoVDP'
+VRRMP4_CVVDP = r'C:\Users\15142\Projects\VRR\VRRMP4_CVVDP'
+VRRDATA = 'C:/Users/15142/Projects/VRR/Data'
+VRR_Patches = f'{VRRDATA}/VRR_Patches'
+VRR_Motion = r'C:\Users\15142\Projects\VRR\VRR_Motion'
 VRRML = f'C:/Users/15142/Projects/VRR/Data/VRRML'
 VRRML_Project = r'C:\Users\15142\Projects\VRR\VRRML'
-# VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
+VRRMP4_reference = r'C:\Users\15142\Projects\VRR\VRRMP4\uploaded\reference'
 
 # # iron
 # VRRML = r'/anfs/gfxdisp/quality_datasets/VRR/VRRML'
@@ -80,10 +81,37 @@ transform_resize = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-transform = transforms.Compose([
-    transforms.Resize((64, 64)),
-    transforms.ToTensor(),
-])
+
+# view tensorboard
+# tensorboard --logdir=/path/to/logs
+
+
+
+def count_data_labels(training_folder, output_csv_path):
+    # Dictionary to store counts
+    subfolder_counts = Counter()
+
+    # Loop through each subfolder in the training folder
+    for subfolder in os.listdir(training_folder):
+        subfolder_path = os.path.join(training_folder, subfolder)
+        if os.path.isdir(subfolder_path):  # Ensure it's a directory
+            # Count number of images in the subfolder (assuming images are files)
+            image_count = len([f for f in os.listdir(subfolder_path) if os.path.isfile(os.path.join(subfolder_path, f))])
+            subfolder_counts[subfolder] = image_count
+
+    # Convert to DataFrame and sort by count (descending)
+    df_subfolder_counts = pd.DataFrame(subfolder_counts.items(), columns=["Subfolder", "Image Count"])
+    df_subfolder_counts = df_subfolder_counts.sort_values(by="Image Count", ascending=False)
+
+    total_images = df_subfolder_counts["Image Count"].sum()
+    print("Total number of images:", total_images) # 351748
+    num_rows = len(df_subfolder_counts)
+    print("Number of rows:", num_rows)
+    num_data_each_label =  int(total_images/num_rows)
+    print(f'num_data_each_label {num_data_each_label}')
+    df_subfolder_counts.to_csv(output_csv_path, index=False)
+
+
 
 def get_velocities_from_patch_data(folder):
     velocities = []
@@ -109,6 +137,14 @@ def get_jod_score(all_data, sheet_name, bitrate, fps, resolution):
     return all_data.get(sheet_name, {}).get(bitrate, {}).get(fps, {}).get(resolution, "Not Found")
 
 
+def set_manual_seed():
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42) # Ensure CUDA also uses the same seed
+    torch.cuda.manual_seed_all(42)  # If using multi-GPU
+    np.random.seed(42) # Ensure reproducibility with NumPy and Python's random
+    torch.backends.cudnn.deterministic = True # Ensure deterministic behavior (may slow down training slightly)
+    torch.backends.cudnn.benchmark = False
+ 
 
 def denormalize(normalized_value, min_val=0, max_val=276):
     original_value = normalized_value * (max_val - min_val) + min_val
@@ -271,10 +307,20 @@ def count_parameters_onnx(onnx_model_path):
 
 
 def compute_weighted_loss(res_out, fps_out, res_targets, fps_targets):
+    """
+    fps_out = [[-0.8591, -0.2278, -0.2324,  0.2619,  0.3697,  1.0163,  0.3206,  0.0301, 0.6547,  0.5373],
+    [-1.0479, -0.2896, -0.3712,  0.1073,  0.3870,  1.2194,  0.4162,  0.0676, 0.7677,  0.8770], … ]
+    The fact that the “correct” index is 9 (meaning the ground truth class is 120fps) does not mean the model’s 
+    10th logit should be 9.0. It only means that in an ideal scenario, that 10th logit (index 9) should be the largest, so that softmax chooses class 9 with high probability.
+    
+    CrossEntropyLoss internally applies a softmax to these raw logits and then compares the resulting probability distribution to the ground‐truth class index.
+    The ground truth of “9” means “the 10th class is correct.”
+    """
     loss_fn_res = nn.CrossEntropyLoss() # CrossEntropyLoss internally apply softmax to logits and calculates the loss
     loss_fn_fps = nn.CrossEntropyLoss()
-    # print(f'res_targets {res_targets.long().dtype}')
-    # print(f'res_out {res_out}， res_targets {res_targets}')
+    # print(f'res_targets {res_targets.dtype} {res_targets.long().dtype}')
+    # print(f'fps_out {fps_out} \nfps_targets {fps_targets}')
+    # print(f'res_out {res_out} \nres_targets {res_targets}')
     # print(f'fps_targets {fps_targets.dtype}')
     loss_res = loss_fn_res(res_out, res_targets) # .type(torch.LongTensor).to(torch.device('cuda')))
     loss_fps = loss_fn_fps(fps_out, fps_targets) # .type(torch.LongTensor).to(torch.device('cuda')))
@@ -294,13 +340,10 @@ def find_key_by_value(dictionary, target_value):
 
 
 def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targets):
-    # for i in range(fps_targets.size()[0]):
     base_name = path.split('_path')[0]  # e.g., "crytek_sponza", "bistro", "gallery"
-    # print(f'\npath {path}, base_name {base_name}')
 
     start_idx = path.find('path')
     path_name = path[start_idx:]
-    # path_name = '_'.join(path.split('_')[1:])
     variable_name = f"{base_name}_jod"
     if variable_name in globals():
         corresponding_value = globals()[variable_name]
@@ -308,15 +351,9 @@ def compute_JOD_loss(path, bitrate, fps_preds, res_preds, fps_targets, res_targe
         res_preds_val = find_key_by_value(res_map, res_preds)
         fps_targets_val = find_key_by_value(fps_map, fps_targets)
         res_targets_val = find_key_by_value(res_map, res_targets)
-        bitrate_val = find_key_by_value(bitrate_map, round(bitrate, 3))
-
-        # print(f"{variable_name} fps, res preds {fps_preds_val, res_preds_val}")
-        # print(f"fps, res targets {fps_targets_val, res_targets_val}")
-        # print(f"path_name {path_name}, bitrate_val {bitrate_val}")
+        bitrate_val = find_key_by_value(bitrate_map, bitrate)
         pred = get_jod_score(corresponding_value, path_name, bitrate_val, fps_preds_val, str(res_preds_val))
         truth = get_jod_score(corresponding_value, path_name, bitrate_val, fps_targets_val, str(res_targets_val))
-        # print(f'pred {pred}, truth {truth}')
-        # return (pred - truth) ** 2
         return pred, truth
     else:
         # print(f"Variable {variable_name} does not exist")
@@ -435,10 +472,10 @@ def compute_RMSEP(predicted, target):
     return round(rmspe.item() * 100, 3)
 
     
-def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, paths=None):
+def compute_accuracy(fps_preds, res_preds, fps_targets, res_targets, bitrate=None, paths=None):
         # print(f'fps_out \n {}')
-        _, fps_preds = torch.max(fps_out, dim=1)
-        _, res_preds = torch.max(res_out, dim=1)
+        # _, fps_preds = torch.max(fps_out, dim=1)
+        # _, res_preds = torch.max(res_out, dim=1)
 
         framerate_accuracy = torch.tensor(torch.sum(fps_preds == fps_targets).item() / len(fps_targets))
         resolution_accuracy = torch.tensor(torch.sum(res_preds == res_targets).item() / len(res_targets))
@@ -450,15 +487,14 @@ def compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate=None, p
         data_size = len(fps_targets)
         if paths:
             for i in range(data_size):
-                # print(f'path {paths[i]}')
-                jod_preds, jod_targets =  compute_JOD_loss(paths[i], bitrate[i].item(), fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
+                jod_preds, jod_targets =  compute_JOD_loss(paths[i], bitrate[i], fps_preds[i].item(), res_preds[i].item(), fps_targets[i].item(), res_targets[i].item())
                 jod_preds_arr.append(jod_preds)
                 jod_targets_arr.append(jod_targets)
             # jod_loss /= data_size
             # jod_loss_arr.append(jod_loss)
             # print(f'jod_loss {jod_loss} data_size {data_size}')
         return framerate_accuracy, resolution_accuracy, both_correct_accuracy, torch.tensor(jod_preds_arr), torch.tensor(jod_targets_arr)
-# torch.sqrt(torch.mean(torch.tensor(jod_loss_arr)))
+
 
 def plot_test_result(test_dl, predictions, epoch="", SAVE_PLOT=False):
     for batch in test_dl:

@@ -1,5 +1,6 @@
 import torch
 import os
+from utils import *
 
 class EarlyStopping:
     def __init__(self, patience=5, delta=0, path="best_model.pth"):
@@ -16,7 +17,7 @@ class EarlyStopping:
         self.counter = 0
         self.early_stop = False
 
-    def __call__(self, val_loss, model, epoch):
+    def __call__(self, val_loss, model, epoch, optimizer=None):
         """
         Checks if validation loss has improved. If not, increases counter. 
         Stops training when counter reaches patience.
@@ -26,6 +27,8 @@ class EarlyStopping:
             self.counter = 0
             # torch.save(model.state_dict(), self.path)  # Save best model
             os.makedirs(self.path, exist_ok=True)
+            if optimizer:
+                save_checkpoint(model, optimizer,  f'{self.path}/checkpoint_halfway.pth', epoch)
             torch.save(model.state_dict(), f'{self.path}/classification.pth')
         else:
             self.counter += 1

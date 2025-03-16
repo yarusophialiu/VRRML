@@ -30,11 +30,12 @@ class DecRefClassification_multiple(MultiplemageClassificationBase):
             nn.Conv2d(128, 128, kernel_size=3, padding=1), 
             nn.ReLU(),
             nn.MaxPool2d(2, 2), 
-                        nn.AdaptiveAvgPool2d((1, 1)),  
+            nn.AdaptiveAvgPool2d((1, 1)),  
             nn.Flatten(),  
             nn.Linear(128, 64),  
             nn.ReLU(),
-            nn.Linear(64, 32)  
+            nn.Linear(64, 32),
+            nn.Sigmoid()  
         )
 
         self.fps = FPS

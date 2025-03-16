@@ -54,9 +54,11 @@ class ImageClassificationBase(nn.Module):
         # res_out, fps_out = self(images, bitrate, velocity)  # NaturalSceneClassification.forward
         # print(f'training_step out {out.size()} \n {out.squeeze()}')
         # print(f'path {path}')
+        _, fps_preds = torch.max(fps_out, dim=1)
+        _, res_preds = torch.max(res_out, dim=1)
     
         total_loss = compute_weighted_loss(res_out, fps_out, res_targets, fps_targets)
-        framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_out, res_out, fps_targets, res_targets, bitrate, path)
+        framerate_accuracy, resolution_accuracy, both_correct_accuracy, jod_preds, jod_targets = compute_accuracy(fps_preds, res_preds, fps_targets, res_targets, bitrate, path)
         # Calculate accuracy, i.e.  proportion of the variance in the dependent variable that is predictable 
         # print(f'validation_step fps_out {fps_out.size()} \n {fps_out}')
         _, fps_preds = torch.max(fps_out, dim=1)

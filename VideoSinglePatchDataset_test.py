@@ -91,7 +91,8 @@ class VideoSinglePatchDataset_test(Dataset):
         bitrate = self.normalize(bitrate, self.min_bitrate, self.max_bitrate)
         # print(f'bitrate {bitrate}\n')
         # TODO: normalize velocity
-        velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
+        # velocity = round(normalize_z_value(velocity, mean_velocity, std_velocity), 3)
+        velocity = self.normalize(velocity, self.min_velocity, self.max_velocity)
         # print(f'velocity {velocity}\n')
 
 
