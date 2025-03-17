@@ -103,7 +103,6 @@ class DecRefClassification(ImageClassificationBase):
         # print(f'features \n {features}')
         min_value = torch.min(features).item()
         max_value = torch.max(features).item()
-        print("Min:", min_value, "Max:", max_value)
         selected_tensors = []
 
         if self.fps:

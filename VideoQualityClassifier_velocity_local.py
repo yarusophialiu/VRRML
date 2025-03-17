@@ -106,7 +106,7 @@ def fit(epochs, model, train_loader, val_loader, optimizer, training_mode, total
             total_epoch = epoch
             break
 
-        if SAVE_HALFWAY and epoch % 90 == 0 and epoch > 0:
+        if SAVE_HALFWAY and epoch % 45 == 0 and epoch > 0:
             os.makedirs(model_path, exist_ok=True)
             print(f"Epoch {epoch} is a multiple of 10.")
             save_checkpoint(model, optimizer,  f'{model_path}/checkpoint{epoch}.pth', epoch)
@@ -167,6 +167,14 @@ def fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=Tru
     print('sample image has ', sample['fps'], 'fps,', sample['resolution'], ' resolution,', sample['bitrate'], 'bps')
     print(f'normalized velocity is {sample["velocity"]}, path is {sample["path"]}')
     print(f'learning rate {lr}, batch_size {batch_size}')
+
+    # inference_output_dir = f'inference_outputs/'
+    # os.makedirs(inference_output_dir, exist_ok=True)
+    # print(f'dataset.res_targets {type(dataset.res_targets)}')
+    # with open(f"{inference_output_dir}/training_data_target_res.py", "w") as f:
+    #     f.write(f"target_res = {dataset.res_targets}\n")
+    # with open(f"{inference_output_dir}/training_data_target_fps.py", "w") as f:
+    #     f.write(f"target_fps = {dataset.fps_targets}\n")
 
     train_dl = DataLoader(dataset, batch_size, shuffle = True, num_workers = 4, pin_memory = True)
     val_dl = DataLoader(val_dataset, batch_size*2, shuffle = True, num_workers = 4, pin_memory = True)
@@ -230,22 +238,27 @@ def set_manual_seed():
 
 # train smaller model
 # python .\VideoQualityClassifier_velocity_local.py --training_mode no_fps
+# write prediction and target tensor to python file in VideoQualityClassifier_velocity_test.py
+# plot prediction vs target in plot_reference.py
+# postprocess_training.py write to model.txt, and/or save pred_res, pred_fps
+# plot ground truth training data on local VRRML_Create_Data plot_ground_truth_data.py
 if __name__ == "__main__":
     SAVE_MODEL = True
     SAVE_MODEL_HALF_WAY = True
     START_TRAINING = True # True False
-    CHECKPOINT = True
+    CHECKPOINT = False
     TEST_EVAL = True
     PATIENCE = 10 # early stopping
-    num_epochs = 180 # 150
+    num_epochs = 300 # 150
     ML_DATA_TYPE = 'ML' # ML_smaller
     PATCH_SIZE = 64
     TRAINED_EPOCH = 0
+    velocity_type = 'frame-velocity/max-jod-nooutliers' # TODO frame-velocity patch-velocity
 
     parser = argparse.ArgumentParser(description="Training Configuration")
     parser.add_argument('--training_mode', type=str, choices=[
                         'no_fps', 'no_res', 'no_fps_no_resolution', 'no_velocity', 'no_fps_no_resolution_no_velocity',
-                        'consecutive_patch', 'consecutive_patch_no_velocity', 'random_patch', 
+                        'consecutive_patch', 'consecutive_patch_no_velocity', 'random_patch', 'random_patch_no_velocity',
                         'full', 'invariant_consecutive', 'invariant_random', 
                         'invariant_consecutive_no_velocity', 'invariant_random_no_velocity'
     ], required=True, help="Specify the training mode")
@@ -258,13 +271,16 @@ if __name__ == "__main__":
         'no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'single'},
         'no_fps_no_resolution_no_velocity': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': False, 'patch_type': 'single'},
         'full': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'single'},
-        'consecutive_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
-        'consecutive_patch_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
-        'random_patch': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'random'},
-        'invariant_consecutive': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
-        'invariant_consecutive_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
-        'invariant_random': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': True, 'patch_type': 'random'},
-        'invariant_random_no_velocity': {'FPS': True, 'RESOLUTION': True, 'MODEL_VELOCITY': False, 'patch_type': 'random'},
+        
+        'consecutive_patch': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
+        'consecutive_patch_no_velocity': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
+        'random_patch': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'random'},
+        'random_patch_no_velocity': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': False, 'patch_type': 'random'},
+        
+        'invariant_consecutive': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'consecutive'},
+        'invariant_consecutive_no_velocity': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': False, 'patch_type': 'consecutive'},
+        'invariant_random': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': True, 'patch_type': 'random'},
+        'invariant_random_no_velocity': {'FPS': False, 'RESOLUTION': False, 'MODEL_VELOCITY': False, 'patch_type': 'random'},
     }
 
     config = training_params[args.training_mode]
@@ -272,18 +288,17 @@ if __name__ == "__main__":
     RESOLUTION = config['RESOLUTION']
     MODEL_VELOCITY = config['MODEL_VELOCITY']
     patch_type = config['patch_type']
-    print(f'FPS {FPS}, RESOLUTION {RESOLUTION}, MODEL_VELOCITY {MODEL_VELOCITY}, patch_type {patch_type}')
+    print(f'\nFPS {FPS}, RESOLUTION {RESOLUTION}, MODEL_VELOCITY {MODEL_VELOCITY}, patch_type {patch_type}')
 
-    velocity_type = 'frame-velocity' # frame-velocity patch-velocity
     PATCH_SIZE = 64
-    checkpoint_path = '2025-03-02/no_fps_no_resolution_no_velocity_20_43/checkpoint90.pth'
-
+    checkpoint_path = '2025-03-13-frame-dropjod/no_fps_no_resolution_23_05/checkpoint179.pth'
     lr = 0.0003
     opt_func = torch.optim.Adam # torch.optim.SGD not work
     batch_size = 128 
     patch_size = (PATCH_SIZE, PATCH_SIZE) 
 
-    FRAMENUMBER = True if velocity_type == 'frame-velocity' else False # True
+    FRAMENUMBER = True if 'frame-velocity' in velocity_type else False # True
+    print(f'FRAMENUMBER {FRAMENUMBER}')
 
     device = get_default_device()
     saved_model_path = None
@@ -297,7 +312,7 @@ if __name__ == "__main__":
         epochs = range(num_epochs)
         if CHECKPOINT:
             model, epochs, optimizer = load_checkpoint_from_path(checkpoint_path, model, optimizer)
-            print(f'Training from checkpoint, epochs {epochs}')
+            print(f'Training from checkpoint, epochs {epochs}\n')
         model.to(device)
         train_dl, val_dl = fetch_dataloader(batch_size, patch_size, device, patch_type, FRAMENUMBER=FRAMENUMBER)
         history, model, saved_model_path, TRAINED_EPOCH = fit(epochs, model, train_dl, val_dl, optimizer, args.training_mode, TRAINED_EPOCH, SAVE_MODEL=SAVE_MODEL, \
@@ -314,7 +329,7 @@ if __name__ == "__main__":
         print('\nTest evaluating...')
         # if velocity_type == 'patch-velocity':
         TEST_FRAMENUMBER = True
-        test_dl = fetch_test_dataloader(batch_size * 20, patch_size, device, patch_type, FRAMENUMBER=TEST_FRAMENUMBER)        
+        test_dl = fetch_test_dataloader(batch_size * 10, patch_size, device, patch_type, FRAMENUMBER=TEST_FRAMENUMBER)        
         result, res_preds, fps_preds, res_targets, fps_targets, jod_preds, jod_targets = evaluate_test_data(model, test_dl, args.training_mode)
         predicted_fps = torch.tensor([reverse_fps_map[int(pred)] for pred in fps_preds])
         target_fps = torch.tensor([reverse_fps_map[int(target)] for target in fps_targets])
