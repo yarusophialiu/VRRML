@@ -238,10 +238,12 @@ def set_manual_seed():
 
 # train smaller model
 # python .\VideoQualityClassifier_velocity_local.py --training_mode no_fps
-# write prediction and target tensor to python file in VideoQualityClassifier_velocity_test.py
-# plot prediction vs target in plot_reference.py
+# plot prediction vs target in this repo's plot_reference.py
 # postprocess_training.py write to model.txt, and/or save pred_res, pred_fps
-# plot ground truth training data on local VRRML_Create_Data plot_ground_truth_data.py
+# plot inference data, on local VRRML_Create_Data plot_inference_data.py, use folders in inference_outputs 
+# to get folders, write prediction and target tensor to python file in VideoQualityClassifier_velocity_test.py
+# plot ground truth training data (use csv) on local VRRML_Create_Data plot_ground_truth_data.py
+# get csv of training data, see utils.py count_data_labels(training_folder, output_csv_path) 
 if __name__ == "__main__":
     SAVE_MODEL = True
     SAVE_MODEL_HALF_WAY = True
